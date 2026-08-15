@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Dashboard — Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css">
+
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">T</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Teacher</div>
+        <div class="ur">Instructor</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item active"><span class="nav-icon">▣</span> Dashboard</a>
+      <a href="courses.html" class="nav-item"><span class="nav-icon">◫</span> My Courses</a>
+      <div class="nav-label">Teaching</div>
+      <a href="students.html" class="nav-item"><span class="nav-icon">◎</span> Students</a>
+      <a href="grading.html" class="nav-item"><span class="nav-icon">◈</span> Grading</a>
+      <a href="schedule.html" class="nav-item"><span class="nav-icon">◷</span> Schedule</a>
+      <div class="nav-label">Account</div>
+      <a href="../login.html" class="nav-item logout" id="logout-btn"><span class="nav-icon">→</span> Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><span class="topbar-title">Dashboard</span></div>
+      <div class="topbar-right">
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <span>🔔</span>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header"><h4>Notifications</h4><button onclick="markAllRead()">Mark all read</button></div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1 id="t-welcome">Welcome</h1>
+        <p id="t-subject-label">Loading your courses...</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row" id="t-stats" style="margin-bottom:1.25rem"></div>
+
+      <div class="grid-2" style="gap:1rem;margin-bottom:1rem">
+        <!-- My Courses -->
+        <div class="card">
+          <div class="card-title">
+            My Courses
+            <a href="courses.html" class="btn btn-ghost btn-sm">View All</a>
+          </div>
+          <div id="t-courses-list"></div>
+        </div>
+
+        <!-- Right column -->
+        <div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-title">
+              Pending Approvals
+              <a href="grading.html" class="btn btn-ghost btn-sm">Go to Grading</a>
+            </div>
+            <div id="t-pending-grading"></div>
+          </div>
+          <div class="card">
+            <div class="card-title">Today's Classes</div>
+            <div id="t-today-classes"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="card">
+        <div class="card-title">Recent Student Activity</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th><th>Action</th><th>Course</th><th>Time</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="t-activity-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+  // Set welcome message after app.js loads
+  // In Teacher/dashboard.html inline script — replace with:
+  document.addEventListener('DOMContentLoaded', () => {
+    const teacher = getActiveTeacher();
+    if (!teacher) return; // no session, setupSidebar handles redirect
+    const welcomeEl = document.getElementById('t-welcome');
+    const subjectEl = document.getElementById('t-subject-label');
+    if (welcomeEl) welcomeEl.textContent = 'Welcome, ' + teacher.name.split(' ').slice(-1)[0];
+    if (subjectEl) subjectEl.textContent = teacher.subject + ' — ' + getTeacherCourseIds().length + ' course(s) assigned';
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Learning Hub — Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css">
+
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">AH</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Student</div>
+        <div class="ur">Student</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Main</div>
+      <a href="dashboard.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="courses.html"   class="nav-item active"><span class="nav-icon">▤</span> My Courses</a>
+      <div class="nav-label">Academic</div>
+      <a href="schedule.html"    class="nav-item"><span class="nav-icon">◷</span> Schedule</a>
+      <a href="attendance.html"  class="nav-item"><span class="nav-icon">◎</span> Attendance</a>
+      <a href="performance.html" class="nav-item"><span class="nav-icon">◈</span> Performance</a>
+      <a href="fees.html"        class="nav-item"><span class="nav-icon">◉</span> Fee Details</a>
+      <div class="nav-label">Account</div>
+      <div class="notif-bell-wrap">
+        <a href="notifications.html" class="nav-item">
+          <span class="nav-icon">◐</span> Notifications
+          <span class="nav-badge" id="notif-nav-badge" style="display:none">0</span>
+        </a>
+        <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-header">
+            <h4>Notifications</h4>
+            <button onclick="markAllRead()">Mark all read</button>
+          </div>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
+      </div>
+      <a href="#" id="logout-btn" class="nav-item logout"><span class="nav-icon">→</span> Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <a href="courses.html"
+          style="font-size:.83rem;color:var(--text-mid);text-decoration:none">← Courses</a>
+        <div class="topbar-title" id="cd-title">Loading...</div>
+        <span style="font-size:.8rem;color:var(--text-mid)" id="cd-teacher"></span>
+      </div>
+      <div class="topbar-right" style="gap:0.5rem">
+        <span style="font-size:.8rem;color:var(--text-mid)" id="cd-prog-txt">0%</span>
+        <div class="progress-track" style="width:110px;margin:0">
+          <div class="progress-fill" id="cd-prog-bar" style="width:0%"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="msg-teacher-btn">Message Teacher</button>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <p id="cd-desc"
+        style="color:var(--text-mid);font-size:.87rem;margin-bottom:1.25rem"></p>
+
+      <div class="learning-shell">
+        <!-- Content viewer -->
+        <div>
+          <div class="content-area" style="margin-bottom:1rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        margin-bottom:.75rem">
+              <h3 style="font-size:.95rem;font-weight:700;color:var(--navy)"
+                id="content-topic-title">Select a topic from the curriculum</h3>
+              <div id="content-due"></div>
+            </div>
+            <div class="content-tabs" id="content-tabs"></div>
+            <div id="content-panels">
+              <p style="color:var(--text-light);font-size:.85rem;padding:1rem 0">
+                Click any topic on the right to load its content here.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Curriculum panel -->
+        <div class="curriculum-box">
+          <div class="curriculum-head">
+            <h3>Curriculum</h3>
+            <span style="font-size:.72rem;color:var(--text-light)">✓ = Mark done</span>
+          </div>
+          <div class="curriculum-scroll">
+            <div id="curriculum-container"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Message Modal -->
+<div class="message-modal" id="msg-modal">
+  <div class="message-box">
+    <h3>Message: <span id="msg-teacher-name"></span></h3>
+    <p style="font-size:.83rem;color:var(--text-mid);margin-bottom:.75rem">
+      Course: <span id="msg-course-name"></span>
+    </p>
+    <div class="msg-history" id="msg-history"></div>
+    <div style="display:flex;gap:8px;margin-top:.75rem">
+      <input type="text" id="msg-input" class="form-control"
+        placeholder="Ask your teacher anything..."
+        onkeydown="if(event.key==='Enter')sendMessage()">
+      <button class="btn btn-navy btn-sm" onclick="sendMessage()">Send</button>
+    </div>
+    <button class="btn btn-ghost btn-full" style="margin-top:.6rem"
+      onclick="closeMessage()">Close</button>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+</body>
+</html>

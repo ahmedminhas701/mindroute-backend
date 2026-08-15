@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Schedule — Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/styles.css">
+
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+        <div class="logo">
+          <div class="logo-icon">MR</div>
+          <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+        </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">AH</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Student</div>
+        <div class="ur">Student</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Main</div>
+      <a href="dashboard.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="courses.html"   class="nav-item"><span class="nav-icon">▤</span> My Courses</a>
+      <div class="nav-label">Academic</div>
+      <a href="schedule.html"    class="nav-item active"><span class="nav-icon">◷</span> Schedule</a>
+      <a href="attendance.html"  class="nav-item"><span class="nav-icon">◎</span> Attendance</a>
+      <a href="performance.html" class="nav-item"><span class="nav-icon">◈</span> Performance</a>
+      <a href="fees.html"        class="nav-item"><span class="nav-icon">◉</span> Fee Details</a>
+      <div class="nav-label">Account</div>
+      <div class="notif-bell-wrap">
+        <a href="notifications.html" class="nav-item">
+          <span class="nav-icon">◐</span> Notifications
+          <span class="nav-badge" id="notif-nav-badge" style="display:none">0</span>
+        </a>
+        <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-header">
+            <h4>Notifications</h4>
+            <button onclick="markAllRead()">Mark all read</button>
+          </div>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
+      </div>
+      <a href="#" id="logout-btn" class="nav-item logout"><span class="nav-icon">→</span> Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><div class="topbar-title">Schedule</div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Class Timetable</h1>
+        <p>Your weekly classes. Green = physical, Blue = online. Today is highlighted.</p>
+      </div>
+      <div class="schedule-grid" id="schedule-container"></div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+</body>
+</html>

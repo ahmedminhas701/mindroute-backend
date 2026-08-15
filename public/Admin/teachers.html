@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teachers — Mind Route Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css" />
+  <style>
+
+    .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px); }
+    .modal-box { background:var(--white);border-radius:var(--radius-xl);padding:1.75rem;width:100%;max-width:480px;box-shadow:var(--shadow-lg);border:1px solid var(--border);max-height:90vh;overflow-y:auto; }
+    .modal-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem; }
+    .modal-header h3 { font-size:1rem;font-weight:600;color:var(--text-dark); }
+    .modal-close { background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light);line-height:1; }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">A</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Admin</div>
+        <div class="ur">Administrator</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">D</span>Dashboard
+      </a>
+      <div class="nav-label">Management</div>
+      <a href="students.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">S</span>Students
+      </a>
+      <a href="teachers.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">T</span>Teachers
+      </a>
+      <a href="batches.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">B</span>Batches
+      </a>
+      <a href="tests.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">E</span>Entry Tests
+      </a>
+      <div class="nav-label">Account</div>
+      <a href="../login.html" class="nav-item logout" id="logout-btn">
+        <span class="nav-icon">&#x2192;</span>Sign Out
+      </a>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">Teachers</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-primary btn-sm" onclick="openAdminTeacherModal(null)">Add Teacher</button>
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <span style="font-size:0.85rem">&#x1F514;</span>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header">
+              <h4>Notifications</h4>
+              <button onclick="markAllRead()">Mark all read</button>
+            </div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Teacher Management</h1>
+        <p>Manage teacher accounts and course assignments.</p>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-row" id="teacher-stats-row" style="margin-bottom:1.25rem"></div>
+
+      <!-- Table -->
+      <div class="manage-table-card">
+        <div class="manage-table-head">
+          <h3>All Teachers</h3>
+          <input type="text" class="form-control" id="teacher-search" placeholder="Search..." oninput="renderAdminTeachers()" style="height:32px;width:200px">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Teacher</th>
+                <th>Subject</th>
+                <th>Phone</th>
+                <th>Courses</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-teachers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Teacher Modal -->
+<div class="modal-overlay" id="admin-teacher-modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="atm-modal-title">Add Teacher</h3>
+      <button class="modal-close" onclick="closeAdminTeacherModal()">&#215;</button>
+    </div>
+    <input type="hidden" id="atm-id">
+    <div class="grid-2">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" class="form-control" id="atm-name" placeholder="Teacher full name">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" class="form-control" id="atm-email" placeholder="teacher@mindroute.pk">
+      </div>
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="text" class="form-control" id="atm-phone" placeholder="0300-0000000">
+      </div>
+      <div class="form-group">
+        <label>Subject</label>
+        <input type="text" class="form-control" id="atm-subject" placeholder="Biology, Physics...">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select class="form-control" id="atm-status">
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
+      <button class="btn btn-ghost btn-sm" onclick="closeAdminTeacherModal()">Cancel</button>
+      <button class="btn btn-danger btn-sm" id="atm-delete-btn" onclick="deleteCurrentTeacher()" style="display:none">Delete</button>
+      <button class="btn btn-primary btn-sm" onclick="saveAdminTeacher()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+// let TEACHERS_DB = JSON.parse(localStorage.getItem('mr_teachers_db') || 'null') || [
+//   { id:'T001', name:'Ms. Ayesha Noor',  email:'teacher@mindroute.pk', phone:'0300-1111111', subject:'Biology',   status:'active',   courseIds:[1], joinDate:'Aug 1, 2024' },
+//   { id:'T002', name:'Dr. Kamran Baig',  email:'kamran@mindroute.pk',  phone:'0321-2222222', subject:'Physics',   status:'active',   courseIds:[2], joinDate:'Aug 1, 2024' },
+//   { id:'T003', name:'Mr. Tariq Mahmood',email:'tariq@mindroute.pk',   phone:'0333-3333333', subject:'Chemistry', status:'active',   courseIds:[3], joinDate:'Aug 5, 2024' },
+//   { id:'T004', name:'Ms. Hira Zuberi',  email:'hira@mindroute.pk',    phone:'0345-4444444', subject:'English',   status:'inactive', courseIds:[], joinDate:'Sep 1, 2024' },
+// ];
+// let BATCHES = JSON.parse(localStorage.getItem('mr_batches') || 'null') || [];
+// function saveTeachersDB() { localStorage.setItem('mr_teachers_db', JSON.stringify(TEACHERS_DB)); }
+// function saveBatches()    { localStorage.setItem('mr_batches',      JSON.stringify(BATCHES)); }
+
+function renderAdminTeachers() {
+  // Stats
+  const statsEl = document.getElementById('teacher-stats-row');
+  if (statsEl) {
+    const active   = TEACHERS_DB.filter(t => t.status === 'active').length;
+    const inactive = TEACHERS_DB.filter(t => t.status === 'inactive').length;
+    const totalCourses = TEACHERS_DB.reduce((a, t) => a + t.courseIds.length, 0);
+    statsEl.innerHTML = `
+      <div class="stat-card"><div class="stat-icon si-navy" style="font-family:var(--font-mono);font-weight:700">T</div><div class="stat-info"><div class="sv">${TEACHERS_DB.length}</div><div class="sl">Total Teachers</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">A</div><div class="stat-info"><div class="sv">${active}</div><div class="sl">Active</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">I</div><div class="stat-info"><div class="sv">${inactive}</div><div class="sl">Inactive</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">C</div><div class="stat-info"><div class="sv">${totalCourses}</div><div class="sl">Total Courses</div></div></div>`;
+  }
+
+  const tbody  = document.getElementById('admin-teachers-tbody');
+  const search = (document.getElementById('teacher-search')?.value || '').toLowerCase();
+  if (!tbody) return;
+
+  let teachers = TEACHERS_DB;
+  if (search) teachers = teachers.filter(t => t.name.toLowerCase().includes(search) || t.subject.toLowerCase().includes(search) || t.email.toLowerCase().includes(search));
+
+  tbody.innerHTML = '';
+  if (!teachers.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No teachers found.</td></tr>';
+    return;
+  }
+
+  teachers.forEach(t => {
+    const courseNames = t.courseIds.map(cid => COURSES[cid]?.subject || '?').join(', ') || '—';
+    tbody.innerHTML += `<tr>
+      <td>
+        <div style="font-weight:600">${t.name}</div>
+        <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${t.email}</div>
+      </td>
+      <td>${t.subject}</td>
+      <td style="font-family:var(--font-mono);font-size:0.76rem">${t.phone}</td>
+      <td style="font-size:0.78rem;color:var(--text-mid)">${courseNames}</td>
+      <td><span class="badge ${t.status==='active'?'badge-green':'badge-orange'}">${t.status}</span></td>
+      <td style="font-family:var(--font-mono);font-size:0.76rem">${t.joinDate}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openAdminTeacherModal('${t.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTeacher('${t.id}')">Remove</button>
+      </td>
+    </tr>`;
+  });
+}
+
+function openAdminTeacherModal(tid) {
+  const titleEl = document.getElementById('atm-modal-title');
+  const delBtn  = document.getElementById('atm-delete-btn');
+
+  if (tid) {
+    const t = TEACHERS_DB.find(x => x.id === tid);
+    if (!t) return;
+    titleEl.textContent = 'Edit Teacher';
+    delBtn.style.display = 'inline-flex';
+    document.getElementById('atm-id').value      = t.id;
+    document.getElementById('atm-name').value    = t.name;
+    document.getElementById('atm-email').value   = t.email;
+    document.getElementById('atm-phone').value   = t.phone;
+    document.getElementById('atm-subject').value = t.subject;
+    document.getElementById('atm-status').value  = t.status;
+  } else {
+    titleEl.textContent = 'Add Teacher';
+    delBtn.style.display = 'none';
+    ['atm-id','atm-name','atm-email','atm-phone','atm-subject'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('atm-status').value = 'active';
+  }
+  document.getElementById('admin-teacher-modal').style.display = 'flex';
+}
+
+function closeAdminTeacherModal() {
+  document.getElementById('admin-teacher-modal').style.display = 'none';
+}
+
+function saveAdminTeacher() {
+  const id      = document.getElementById('atm-id').value;
+  const name    = document.getElementById('atm-name').value.trim();
+  const email   = document.getElementById('atm-email').value.trim();
+  const phone   = document.getElementById('atm-phone').value.trim();
+  const subject = document.getElementById('atm-subject').value.trim();
+  const status  = document.getElementById('atm-status').value;
+
+  if (!name || !email) { showToast('Name and email are required.'); return; }
+
+  if (id) {
+    const idx = TEACHERS_DB.findIndex(t => t.id === id);
+    if (idx !== -1) TEACHERS_DB[idx] = { ...TEACHERS_DB[idx], name, email, phone, subject, status };
+  } else {
+    const newId = 'T' + String(TEACHERS_DB.length + 1).padStart(3, '0');
+    TEACHERS_DB.push({
+      id: newId, name, email, phone, subject, status, courseIds: [],
+      joinDate: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}),
+    });
+  }
+
+  saveTeachersDB();
+  closeAdminTeacherModal();
+  renderAdminTeachers();
+  showToast(id ? 'Teacher updated.' : 'Teacher added.');
+}
+
+function deleteCurrentTeacher() {
+  const id = document.getElementById('atm-id').value;
+  if (id) deleteTeacher(id);
+}
+
+function deleteTeacher(tid) {
+  if (!confirm('Remove this teacher?')) return;
+  const idx = TEACHERS_DB.findIndex(t => t.id === tid);
+  if (idx !== -1) TEACHERS_DB.splice(idx, 1);
+  saveTeachersDB();
+  closeAdminTeacherModal();
+  renderAdminTeachers();
+  showToast('Teacher removed.');
+}
+
+document.addEventListener('DOMContentLoaded', renderAdminTeachers);
+</script>
+</body>
+</html>

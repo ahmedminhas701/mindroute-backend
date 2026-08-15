@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schedule — Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css">
+
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">T</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Teacher</div>
+        <div class="ur">Instructor</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item"><span class="nav-icon">▣</span> Dashboard</a>
+      <a href="courses.html" class="nav-item"><span class="nav-icon">◫</span> My Courses</a>
+      <div class="nav-label">Teaching</div>
+      <a href="students.html" class="nav-item"><span class="nav-icon">◎</span> Students</a>
+      <a href="grading.html" class="nav-item"><span class="nav-icon">◈</span> Grading</a>
+      <a href="schedule.html" class="nav-item active"><span class="nav-icon">◷</span> Schedule</a>
+      <div class="nav-label">Account</div>
+      <a href="../login.html" class="nav-item logout" id="logout-btn"><span class="nav-icon">→</span> Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><span class="topbar-title">Schedule</span></div>
+      <div class="topbar-right">
+        <button class="btn btn-primary btn-sm" onclick="openAddClassModal()">+ Add Class</button>
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <span>🔔</span>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header"><h4>Notifications</h4><button onclick="markAllRead()">Mark all read</button></div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Class Schedule</h1>
+        <p>Manage your weekly timetable. Students are notified when you make changes.</p>
+      </div>
+      <div class="schedule-grid" id="teacher-schedule-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add / Edit Class Modal -->
+<div id="add-class-modal"
+  style="position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:200;
+         display:none;align-items:center;justify-content:center;padding:1rem">
+  <div style="background:var(--white);border-radius:var(--radius-lg);width:100%;
+              max-width:440px;border:1px solid var(--border);box-shadow:var(--shadow-lg)">
+
+    <div style="padding:1.25rem 1.4rem;border-bottom:1px solid var(--border);
+                display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark)"
+        id="acm-title">Add Class</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeAddClassModal()">Cancel</button>
+    </div>
+
+    <div style="padding:1.4rem">
+      <input type="hidden" id="acm-edit-index">
+
+      <div class="form-group">
+        <label>Course</label>
+        <select class="form-control" id="acm-course">
+          <option value="">Select course...</option>
+        </select>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Day</label>
+          <select class="form-control" id="acm-day">
+            <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+            <option>Thursday</option><option>Friday</option><option>Saturday</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Time</label>
+          <input type="time" class="form-control" id="acm-time">
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Type</label>
+          <select class="form-control" id="acm-type" onchange="toggleRoomField()">
+            <option value="physical">Physical</option>
+            <option value="online">Online</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label id="acm-room-label">Room / Hall</label>
+          <input type="text" class="form-control" id="acm-room" placeholder="e.g. Hall A">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Duration (minutes)</label>
+        <input type="number" class="form-control" id="acm-duration"
+          value="90" min="30" step="15">
+      </div>
+
+      <div style="display:flex;gap:7px;justify-content:space-between;align-items:center">
+        <button class="btn btn-danger btn-sm" id="acm-delete-btn"
+          style="display:none" onclick="deleteClass()">Remove Class</button>
+        <button class="btn btn-primary" style="margin-left:auto"
+          onclick="submitAddClass()">Save Class</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  // Populate course dropdown with teacher's actual courses
+  document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('acm-course');
+    if (sel) {
+      getTeacherCourseIds().forEach(cid => {
+        if (COURSES[cid]) {
+          const opt = document.createElement('option');
+          opt.value = COURSES[cid].title;
+          opt.textContent = COURSES[cid].title;
+          sel.appendChild(opt);
+        }
+      });
+    }
+  });
+</script>
+</body>
+</html>

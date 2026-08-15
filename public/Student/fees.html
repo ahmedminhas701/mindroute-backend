@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Fee Details — Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css">
+
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">AH</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Student</div>
+        <div class="ur">Student</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Main</div>
+      <a href="dashboard.html" class="nav-item"><span class="nav-icon">⊞</span> Dashboard</a>
+      <a href="courses.html"   class="nav-item"><span class="nav-icon">▤</span> My Courses</a>
+      <div class="nav-label">Academic</div>
+      <a href="schedule.html"    class="nav-item"><span class="nav-icon">◷</span> Schedule</a>
+      <a href="attendance.html"  class="nav-item"><span class="nav-icon">◎</span> Attendance</a>
+      <a href="performance.html" class="nav-item"><span class="nav-icon">◈</span> Performance</a>
+      <a href="fees.html"        class="nav-item active"><span class="nav-icon">◉</span> Fee Details</a>
+      <div class="nav-label">Account</div>
+      <div class="notif-bell-wrap">
+        <a href="notifications.html" class="nav-item">
+          <span class="nav-icon">◐</span> Notifications
+          <span class="nav-badge" id="notif-nav-badge" style="display:none">0</span>
+        </a>  
+        <div class="notif-dropdown" id="notif-dropdown">
+          <div class="notif-header">
+            <h4>Notifications</h4>
+            <button onclick="markAllRead()">Mark all read</button>
+          </div>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
+      </div>
+      <a href="#" id="logout-btn" class="nav-item logout"><span class="nav-icon">→</span> Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><div class="topbar-title">Fee Details</div></div>
+    </div>
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Fee & Payments</h1>
+        <p>Your complete installment history and upcoming dues.</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row" style="margin-bottom:1.25rem">
+        <div class="stat-card">
+          <div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">T</div>
+          <div class="stat-info"><div class="sv" id="fee-total">—</div><div class="sl">Total Fee</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">P</div>
+          <div class="stat-info"><div class="sv" id="fee-paid">—</div><div class="sl">Amount Paid</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon si-red" style="font-family:var(--font-mono);font-weight:700">R</div>
+          <div class="stat-info"><div class="sv" id="fee-rem">—</div><div class="sl">Remaining</div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">D</div>
+          <div class="stat-info">
+            <div class="sv" id="fee-due" style="font-size:.95rem">—</div>
+            <div class="sl">Next Due Date</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div class="card" style="margin-bottom:1rem;padding:1rem 1.4rem">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:.83rem;font-weight:600">Payment Progress</span>
+          <span style="font-size:.83rem;color:var(--text-mid)" id="fee-prog-pct">—</span>
+        </div>
+        <div class="progress-track" style="height:10px">
+          <div class="progress-fill green" id="fee-prog-bar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Installments -->
+        <div class="card">
+          <div class="card-title">Installment Breakdown</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Installment</th><th>Amount</th><th>Due Date</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="fees-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Payment info -->
+        <div class="card">
+          <div class="card-title">Payment Instructions</div>
+          <p style="font-size:.85rem;color:var(--text-mid);margin-bottom:1rem;line-height:1.6">
+            Pay via bank transfer and submit your slip at the front desk or email it to
+            accounts@mindroute.pk.
+          </p>
+          <table style="font-size:.85rem;width:100%">
+            <tbody>
+              <tr>
+                <td style="color:var(--text-light);padding:.35rem 0;border:none;width:130px">Bank</td>
+                <td style="border:none;font-weight:600">HBL</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-light);padding:.35rem 0;border:none">Account Title</td>
+                <td style="border:none;font-weight:600">Mind Route Academy</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-light);padding:.35rem 0;border:none">Account No</td>
+                <td style="border:none;font-family:var(--font-mono);font-size:0.82rem">0123-4567890-01</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-light);padding:.35rem 0;border:none">Branch</td>
+                <td style="border:none">Gulshan-e-Iqbal, Karachi</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="alert alert-warning" style="margin-top:1rem;font-size:0.83rem">
+            Always mention your <strong>Roll No</strong> in the payment description.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+</body>
+</html>

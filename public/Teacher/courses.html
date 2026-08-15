@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Courses — Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .tpill { display:inline-block;padding:1px 6px;border-radius:3px;font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em; }
+    .tpill.video  { background:#EBF2FB;color:#1B5FAD; }
+    .tpill.notes  { background:#D1F5E8;color:#0E8A5F; }
+    .tpill.quiz   { background:#FEF3C7;color:#C47C08; }
+    .tpill.assign { background:#FCE7F3;color:#9D174D; }
+    .tpill.link   { background:#EDE9FE;color:#5B21B6; }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">T</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Teacher</div>
+        <div class="ur">Instructor</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item"><span class="nav-icon">▣</span> Dashboard</a>
+      <a href="courses.html" class="nav-item active"><span class="nav-icon">◫</span> My Courses</a>
+      <div class="nav-label">Teaching</div>
+      <a href="students.html" class="nav-item"><span class="nav-icon">◎</span> Students</a>
+      <a href="grading.html" class="nav-item"><span class="nav-icon">◈</span> Grading</a>
+      <a href="schedule.html" class="nav-item"><span class="nav-icon">◷</span> Schedule</a>
+      <div class="nav-label">Account</div>
+      <a href="../login.html" class="nav-item logout" id="logout-btn"><span class="nav-icon">→</span> Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><span class="topbar-title">My Courses</span></div>
+      <div class="topbar-right">
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <span>🔔</span>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header"><h4>Notifications</h4><button onclick="markAllRead()">Mark all read</button></div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1>My Courses</h1>
+        <p>Manage curriculum, upload materials, add quiz questions and assignments per topic.</p>
+      </div>
+      <div id="teacher-courses-grid"
+        style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ COURSE EDITOR MODAL (full-height side panel) ══ -->
+<div id="course-editor-modal"
+  style="position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:200;
+         display:none;align-items:flex-start;justify-content:flex-end;backdrop-filter:blur(2px)">
+  <div style="width:600px;height:100vh;background:var(--white);border-left:1px solid var(--border);
+              overflow-y:auto;display:flex;flex-direction:column">
+
+    <!-- Header -->
+    <div style="padding:1.25rem 1.4rem;border-bottom:1px solid var(--border);
+                display:flex;align-items:center;justify-content:space-between;
+                position:sticky;top:0;background:var(--white);z-index:10">
+      <div>
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;
+                    color:var(--text-light);font-family:var(--font-mono)"
+          id="editor-course-label">Course Editor</div>
+        <div style="font-size:1rem;font-weight:600;color:var(--text-dark);margin-top:1px"
+          id="editor-course-title">—</div>
+      </div>
+      <div style="display:flex;gap:7px">
+        <button class="btn btn-primary btn-sm" onclick="saveEditorChanges()">Save Changes</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeCourseEditor()">Close</button>
+      </div>
+    </div>
+
+    <!-- Body — weeks + topics rendered by app.js -->
+    <div style="padding:1.25rem 1.4rem;flex:1" id="editor-body"></div>
+
+    <!-- Add week footer -->
+    <div style="padding:1.25rem 1.4rem;border-top:1px solid var(--border);background:var(--bg)">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;
+                  color:var(--text-light);margin-bottom:0.5rem">Add New Week</div>
+      <div style="display:flex;gap:7px">
+        <input type="text" class="form-control" id="new-week-title"
+          placeholder="e.g. Cell Biology" style="font-size:0.83rem">
+        <button class="btn btn-primary btn-sm" style="white-space:nowrap"
+          onclick="addWeekToEditor()">Add Week</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ADD TOPIC MODAL ══ -->
+<div id="add-topic-modal"
+  style="position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:300;
+         display:none;align-items:center;justify-content:center">
+  <div style="background:var(--white);border-radius:var(--radius-lg);padding:1.5rem;
+              width:480px;max-width:95vw;border:1px solid var(--border);box-shadow:var(--shadow-lg)">
+    <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:1rem">
+      Add Topic
+    </div>
+    <input type="hidden" id="add-topic-cid">
+    <input type="hidden" id="add-topic-wnum">
+    <div class="form-group">
+      <label>Topic Title</label>
+      <input type="text" class="form-control" id="new-topic-title" placeholder="e.g. Cell Organelles">
+    </div>
+    <div class="form-group">
+      <label>Due Date (optional)</label>
+      <input type="date" class="form-control" id="new-topic-due">
+    </div>
+    <div class="form-group">
+      <label>Content to include</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px" id="content-type-checks">
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.82rem;
+                      cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0">
+          <input type="checkbox" value="video"> Video
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.82rem;
+                      cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0">
+          <input type="checkbox" value="notes"> Notes
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.82rem;
+                      cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0">
+          <input type="checkbox" value="quiz"> Quiz
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.82rem;
+                      cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0">
+          <input type="checkbox" value="assign"> Assignment
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.82rem;
+                      cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0">
+          <input type="checkbox" value="link"> Link
+        </label>
+      </div>
+    </div>
+    <div style="display:flex;gap:7px;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeAddTopicModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitAddTopic()">Add Topic</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ QUIZ EDITOR MODAL (injected by app.js into #quiz-editor-modal) ══ -->
+<div id="quiz-editor-modal"
+  style="position:fixed;inset:0;background:rgba(0,0,0,0.4);
+         display:none;align-items:center;justify-content:center;
+         z-index:400;backdrop-filter:blur(2px)">
+</div>
+
+<script src="../js/app.js"></script>
+</body>
+</html>

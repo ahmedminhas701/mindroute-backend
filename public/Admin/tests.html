@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entry Tests — Mind Route Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css" />
+  <style>
+    .subject-tag {
+      display:inline-flex;align-items:center;gap:4px;
+      background:var(--blue-pale);color:var(--navy);
+      font-size:0.72rem;padding:2px 8px;border-radius:20px;font-weight:500;
+    }
+    .subject-tag button {
+      background:none;border:none;cursor:pointer;
+      color:var(--text-light);font-size:0.8rem;line-height:1;padding:0;
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">A</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Admin</div>
+        <div class="ur">Administrator</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">D</span>Dashboard
+      </a>
+      <div class="nav-label">Management</div>
+      <a href="students.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">S</span>Students
+      </a>
+      <a href="teachers.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">T</span>Teachers
+      </a>
+      <a href="batches.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">B</span>Batches
+      </a>
+      <a href="tests.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">E</span>Entry Tests
+      </a>
+      <div class="nav-label">Account</div>
+      <a href="../login.html" class="nav-item logout" id="logout-btn">
+        <span class="nav-icon">&#x2192;</span>Sign Out
+      </a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><span class="topbar-title">Entry Tests</span></div>
+      <div class="topbar-right">
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <span style="font-size:0.85rem">&#x1F514;</span>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header">
+              <h4>Notifications</h4>
+              <button onclick="markAllRead()">Mark all read</button>
+            </div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Entry Test Management</h1>
+        <p>Configure entry test programs and the subjects taught in each.</p>
+      </div>
+
+      <!-- Active tags -->
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-title">Active Programs</div>
+        <div class="tag-list" id="test-tag-list"></div>
+      </div>
+
+      <div class="grid-2" style="gap:1.25rem;align-items:start">
+
+        <!-- Add new test -->
+        <div class="card">
+          <div class="card-title">Add New Entry Test</div>
+          <div class="form-group">
+            <label>Program Name</label>
+            <input type="text" class="form-control" id="new-test-name" placeholder="e.g. GAT, SAT...">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea class="form-control" id="new-test-desc" rows="2" placeholder="Short description..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Subjects Taught</label>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
+              <select class="form-control" id="new-test-subject-inp" style="flex:1" onchange="addSubjectToNewTest()">
+                <option value="">— Choose subject —</option>
+              </select>
+              <button class="btn btn-outline btn-sm" onclick="addSubjectToNewTest()">Add</button>
+            </div>
+            <div id="new-test-subjects-list"
+              style="display:flex;flex-wrap:wrap;gap:5px;min-height:32px;
+                     padding:6px;border:1px solid var(--border);
+                     border-radius:var(--radius);background:var(--bg)">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" onclick="addTest()">Add Entry Test</button>
+        </div>
+
+        <!-- All programs table -->
+        <div class="manage-table-card">
+          <div class="manage-table-head"><h3>All Programs</h3></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Subjects</th>
+                  <th>Tag</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="tests-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit subjects modal -->
+<div id="edit-test-subjects-modal"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);
+         align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px)">
+  <div style="background:var(--white);border-radius:var(--radius-xl);padding:1.75rem;
+              width:100%;max-width:420px;box-shadow:var(--shadow-lg);border:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <h3 id="edit-test-modal-title" style="font-size:1rem;font-weight:600"></h3>
+      <button onclick="closeEditTestSubjects()"
+        style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light)">&#215;</button>
+    </div>
+    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
+      <input type="text" class="form-control" id="edit-test-subject-inp"
+        placeholder="Add subject..."  style="flex:1"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();addSubjectToEditTest();}">
+      <button class="btn btn-outline btn-sm" onclick="addSubjectToEditTest()">Add</button>
+    </div>
+    <div id="edit-test-subjects-list"
+      style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;
+             padding:8px;border:1px solid var(--border);
+             border-radius:var(--radius);background:var(--bg);margin-bottom:1rem">
+    </div>
+    <div style="display:flex;gap:0.65rem;justify-content:flex-end">
+      <button class="btn btn-ghost btn-sm" onclick="closeEditTestSubjects()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="saveEditTestSubjects()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  window._newTestSubjects  = [];
+  window._editTestSubjects = [];
+  window._editingTestId    = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    renderTestTags();
+  });
+</script>
+</body>
+</html>

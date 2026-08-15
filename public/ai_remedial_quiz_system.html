@@ -1,0 +1,424 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+.screen{display:none}
+.screen.active{display:block}
+.card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:1rem 1.25rem;margin-bottom:12px}
+.alert{border-radius:var(--border-radius-md);padding:.75rem 1rem;font-size:14px;margin-bottom:12px}
+.alert-warn{background:var(--color-background-warning);color:var(--color-text-warning);border:0.5px solid var(--color-border-warning)}
+.alert-danger{background:var(--color-background-danger);color:var(--color-text-danger);border:0.5px solid var(--color-border-danger)}
+.alert-success{background:var(--color-background-success);color:var(--color-text-success);border:0.5px solid var(--color-border-success)}
+.badge{display:inline-block;padding:2px 8px;border-radius:var(--border-radius-md);font-size:12px;font-weight:500}
+.badge-danger{background:var(--color-background-danger);color:var(--color-text-danger)}
+.badge-warn{background:var(--color-background-warning);color:var(--color-text-warning)}
+.badge-success{background:var(--color-background-success);color:var(--color-text-success)}
+.badge-info{background:var(--color-background-info);color:var(--color-text-info)}
+.row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.label{font-size:13px;color:var(--color-text-secondary)}
+.progress-bar{height:6px;border-radius:3px;background:var(--color-border-tertiary);overflow:hidden;flex:1;margin:0 10px}
+.progress-fill{height:100%;border-radius:3px;transition:width .3s}
+.fill-danger{background:#E24B4A}
+.fill-warn{background:#EF9F27}
+.fill-success{background:#639922}
+.heading{font-size:16px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px}
+.sub{font-size:13px;color:var(--color-text-secondary);margin-bottom:12px}
+.quiz-opt{border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:.6rem .9rem;font-size:14px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;gap:10px;transition:background .15s}
+.quiz-opt:hover{background:var(--color-background-secondary)}
+.quiz-opt.selected{border-color:var(--color-border-info);background:var(--color-background-info)}
+.quiz-opt.correct{border-color:var(--color-border-success);background:var(--color-background-success);color:var(--color-text-success)}
+.quiz-opt.wrong{border-color:var(--color-border-danger);background:var(--color-background-danger);color:var(--color-text-danger)}
+.opt-label{width:20px;height:20px;border-radius:50%;background:var(--color-border-tertiary);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:12px}
+.stat{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:.7rem;text-align:center}
+.stat-val{font-size:22px;font-weight:500;color:var(--color-text-primary)}
+.stat-lbl{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.attempts-dots{display:flex;gap:4px;margin-top:4px}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot-used{background:#E24B4A}
+.dot-avail{background:var(--color-border-secondary)}
+.loading-area{padding:1.5rem;text-align:center;color:var(--color-text-secondary);font-size:14px}
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--color-border-tertiary);border-top-color:var(--color-text-secondary);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.topic-row{display:flex;align-items:center;gap:8px;padding:.5rem 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.topic-row:last-child{border-bottom:none}
+.q-num{font-size:12px;color:var(--color-text-secondary);margin-bottom:4px}
+.q-text{font-size:14px;font-weight:500;color:var(--color-text-primary);margin-bottom:10px}
+.result-icon{font-size:28px;margin-bottom:6px}
+</style>
+
+<div id="s-overview" class="screen active">
+  <div class="card">
+    <div class="heading">Performance overview</div>
+    <div class="sub" id="ov-sub"></div>
+    <div id="ov-subjects"></div>
+  </div>
+  <div id="ov-alert"></div>
+  <div id="ov-weak-list"></div>
+  <div class="btn-row" id="ov-actions"></div>
+</div>
+
+<div id="s-notify" class="screen">
+  <div class="card">
+    <div class="heading">AI tutor recommendation</div>
+    <div class="sub">Your overall quiz average is below 60%. Here's what needs attention:</div>
+    <div id="notif-topics"></div>
+    <div class="alert alert-warn" style="margin-top:8px">
+      The AI tutor will generate a new quiz for each weak topic — questions are different from your previous attempts.
+    </div>
+    <div class="btn-row">
+      <button onclick="startAIQuiz()">Start AI quiz session</button>
+      <button onclick="showScreen('s-overview')">Not now</button>
+    </div>
+  </div>
+</div>
+
+<div id="s-loading" class="screen">
+  <div class="card">
+    <div class="loading-area">
+      <span class="spinner"></span><span id="loading-msg">Generating quiz questions...</span>
+    </div>
+  </div>
+</div>
+
+<div id="s-quiz" class="screen">
+  <div class="card">
+    <div class="row">
+      <span class="label" id="quiz-topic-label"></span>
+      <span class="label" id="quiz-attempts-label"></span>
+    </div>
+    <div class="attempts-dots" id="quiz-dots"></div>
+    <div style="margin-top:12px" id="quiz-questions"></div>
+    <div class="btn-row">
+      <button onclick="submitAIQuiz()">Submit quiz</button>
+    </div>
+    <div id="quiz-result" style="margin-top:10px"></div>
+  </div>
+</div>
+
+<div id="s-done" class="screen">
+  <div class="card" style="text-align:center">
+    <div id="done-icon" class="result-icon"></div>
+    <div class="heading" id="done-heading"></div>
+    <div class="sub" id="done-sub"></div>
+    <div id="done-stats" class="stat-grid" style="margin-top:12px"></div>
+    <div class="btn-row" style="justify-content:center">
+      <button onclick="nextTopic()">Next topic</button>
+      <button onclick="showScreen('s-overview')">Back to overview</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUIZ_DATA = {
+  quizScores:[
+    {topic:'Cell Organelles',subject:'Biology',topicId:'t2',score:3,total:3},
+    {topic:'Cell Division',subject:'Biology',topicId:'t3',score:1,total:2},
+    {topic:'Carbohydrates',subject:'Biology',topicId:'t4',score:1,total:1},
+    {topic:'DNA Structure',subject:'Biology',topicId:'t6',score:0,total:1},
+    {topic:'Photosynthesis',subject:'Biology',topicId:'t7',score:1,total:1},
+    {topic:'Linear Motion',subject:'Physics',topicId:'p1',score:0,total:1},
+    {topic:'Current Electricity',subject:'Physics',topicId:'p4',score:1,total:1},
+    {topic:'Alcohols & Ethers',subject:'Chemistry',topicId:'c2',score:0,total:1},
+  ]
+};
+
+let state={
+  overallPct:0,
+  weakTopics:[],
+  currentTopicIdx:0,
+  currentAttempt:0,
+  attempts:{},
+  sessionScores:[],
+  aiQuestions:[],
+  userAnswers:{}
+};
+
+function calcOverall(){
+  const total=QUIZ_DATA.quizScores.reduce((a,b)=>a+b.total,0);
+  const got=QUIZ_DATA.quizScores.reduce((a,b)=>a+b.score,0);
+  return total?Math.round(got/total*100):0;
+}
+
+function getWeakTopics(){
+  return QUIZ_DATA.quizScores.filter(q=>Math.round(q.score/q.total*100)<60);
+}
+
+function pctColor(p){return p>=70?'fill-success':p>=50?'fill-warn':'fill-danger'}
+function pctBadge(p){return p>=70?'badge-success':p>=50?'badge-warn':'badge-danger'}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function renderOverview(){
+  const op=state.overallPct;
+  const sub=document.getElementById('ov-sub');
+  sub.textContent='Overall quiz average: '+op+'% — '+
+    (op<60?'Below passing threshold (60%)':op<75?'Above threshold but keep improving':'Good standing');
+  
+  const subj={};
+  QUIZ_DATA.quizScores.forEach(q=>{
+    if(!subj[q.subject])subj[q.subject]={got:0,total:0};
+    subj[q.subject].got+=q.score;
+    subj[q.subject].total+=q.total;
+  });
+  
+  let html='';
+  Object.entries(subj).forEach(([name,d])=>{
+    const p=Math.round(d.got/d.total*100);
+    html+=`<div class="topic-row">
+      <span style="font-size:14px;font-weight:500;color:var(--color-text-primary);flex:1">${name}</span>
+      <div class="progress-bar"><div class="progress-fill ${pctColor(p)}" style="width:${p}%"></div></div>
+      <span class="badge ${pctBadge(p)}">${p}%</span>
+    </div>`;
+  });
+  document.getElementById('ov-subjects').innerHTML=html;
+  
+  const alertEl=document.getElementById('ov-alert');
+  const actionsEl=document.getElementById('ov-actions');
+  const weakEl=document.getElementById('ov-weak-list');
+  
+  if(op<60){
+    alertEl.innerHTML=`<div class="alert alert-danger">Your overall quiz score is below 60%. The AI tutor has identified ${state.weakTopics.length} topic(s) where you scored low.</div>`;
+    
+    let whtml='<div class="card"><div class="heading" style="margin-bottom:8px">Weak topics</div>';
+    state.weakTopics.forEach(q=>{
+      const p=Math.round(q.score/q.total*100);
+      const att=(state.attempts[q.topicId]||0);
+      const attLeft=3-att;
+      whtml+=`<div class="topic-row">
+        <div style="flex:1">
+          <div style="font-size:14px;color:var(--color-text-primary)">${q.topic}</div>
+          <div style="font-size:12px;color:var(--color-text-secondary)">${q.subject} · ${p}% scored · ${attLeft} AI attempt${attLeft!==1?'s':''} left</div>
+        </div>
+        <span class="badge badge-danger">${p}%</span>
+      </div>`;
+    });
+    whtml+='</div>';
+    weakEl.innerHTML=whtml;
+    actionsEl.innerHTML=`<button onclick="showNotification()">Use AI tutor</button>`;
+  } else {
+    alertEl.innerHTML=`<div class="alert alert-success">Your overall quiz average is ${op}% — above the 60% threshold. Keep it up!</div>`;
+    weakEl.innerHTML='';
+    actionsEl.innerHTML='';
+  }
+}
+
+function showNotification(){
+  const notifEl=document.getElementById('notif-topics');
+  let html='';
+  state.weakTopics.forEach(q=>{
+    const p=Math.round(q.score/q.total*100);
+    html+=`<div class="topic-row">
+      <span style="font-size:14px;color:var(--color-text-primary);flex:1">${q.topic} <span class="badge badge-info">${q.subject}</span></span>
+      <span class="badge badge-danger">${p}%</span>
+    </div>`;
+  });
+  notifEl.innerHTML=html;
+  showScreen('s-notify');
+}
+
+function startAIQuiz(){
+  state.currentTopicIdx=0;
+  loadTopicQuiz();
+}
+
+function loadTopicQuiz(){
+  const topic=state.weakTopics[state.currentTopicIdx];
+  if(!topic){finishSession();return;}
+  const att=state.attempts[topic.topicId]||0;
+  if(att>=3){state.currentTopicIdx++;loadTopicQuiz();return;}
+  showScreen('s-loading');
+  document.getElementById('loading-msg').textContent='Generating new questions for '+topic.topic+'...';
+  generateQuestions(topic).then(qs=>{
+    state.aiQuestions=qs;
+    state.userAnswers={};
+    renderQuiz(topic,att);
+  });
+}
+
+async function generateQuestions(topic){
+  try{
+    const prompt=`You are a quiz generator for a Pakistani entry test prep LMS (MDCAT/ECAT students).
+Generate exactly 3 MCQ questions about "${topic.topic}" (subject: ${topic.subject}).
+Each question must be DIFFERENT from typical textbook questions — test application and understanding.
+Respond ONLY with a JSON array, no markdown, no preamble:
+[
+  {"q":"question text","opts":["A","B","C","D"],"ans":0},
+  ...
+]
+ans is the 0-based index of the correct option.`;
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        messages:[{role:'user',content:prompt}]
+      })
+    });
+    const data=await resp.json();
+    const txt=data.content.map(c=>c.text||'').join('');
+    const clean=txt.replace(/```json|```/g,'').trim();
+    return JSON.parse(clean);
+  }catch(e){
+    return fallbackQuestions(topic.topic);
+  }
+}
+
+function fallbackQuestions(topic){
+  return [
+    {q:`Which of the following best describes a key concept in ${topic}?`,opts:['Option A — Primary process','Option B — Secondary pathway','Option C — Main mechanism','Option D — Supporting structure'],ans:2},
+    {q:`In the context of ${topic}, what happens when conditions change?`,opts:['Rate increases','Rate decreases','No change occurs','System resets'],ans:0},
+    {q:`Which statement about ${topic} is most accurate?`,opts:['It is always active','It requires energy','It is passive','It occurs randomly'],ans:1}
+  ];
+}
+
+function renderQuiz(topic,att){
+  document.getElementById('quiz-topic-label').textContent=topic.topic+' — '+topic.subject;
+  document.getElementById('quiz-attempts-label').textContent='Attempt '+(att+1)+' of 3';
+  
+  const dots=document.getElementById('quiz-dots');
+  let dh='';
+  for(let i=0;i<3;i++){dh+=`<div class="dot ${i<att?'dot-used':'dot-avail'}"></div>`;}
+  dots.innerHTML=dh;
+  
+  const qEl=document.getElementById('quiz-questions');
+  let qh='';
+  state.aiQuestions.forEach((q,qi)=>{
+    qh+=`<div style="margin-bottom:16px">
+      <div class="q-num">Question ${qi+1} of ${state.aiQuestions.length}</div>
+      <div class="q-text">${q.q}</div>`;
+    q.opts.forEach((opt,oi)=>{
+      qh+=`<div class="quiz-opt" data-qi="${qi}" data-oi="${oi}" onclick="pickOpt(this,${qi},${oi})">
+        <span class="opt-label">${String.fromCharCode(65+oi)}</span>${opt}
+      </div>`;
+    });
+    qh+='</div>';
+  });
+  qEl.innerHTML=qh;
+  document.getElementById('quiz-result').innerHTML='';
+  showScreen('s-quiz');
+}
+
+function pickOpt(el,qi,oi){
+  document.querySelectorAll(`[data-qi="${qi}"]`).forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+  state.userAnswers[qi]=oi;
+}
+
+function submitAIQuiz(){
+  const topic=state.weakTopics[state.currentTopicIdx];
+  const total=state.aiQuestions.length;
+  let correct=0;
+  state.aiQuestions.forEach((q,qi)=>{
+    const chosen=state.userAnswers[qi];
+    const ans=q.ans;
+    document.querySelectorAll(`[data-qi="${qi}"]`).forEach(o=>{
+      const oi=parseInt(o.dataset.oi);
+      if(oi===ans)o.classList.add('correct');
+      else if(oi===chosen)o.classList.add('wrong');
+    });
+    if(chosen===ans)correct++;
+  });
+  
+  const pct=Math.round(correct/total*100);
+  if(!state.attempts[topic.topicId])state.attempts[topic.topicId]=0;
+  state.attempts[topic.topicId]++;
+  
+  const attDone=state.attempts[topic.topicId];
+  const resEl=document.getElementById('quiz-result');
+  
+  if(pct>=70){
+    resEl.innerHTML=`<div class="alert alert-success">Scored ${correct}/${total} (${pct}%) — great job! Moving to next topic.</div>`;
+    state.sessionScores.push({topic:topic.topic,pct,passed:true});
+    setTimeout(()=>{state.currentTopicIdx++;loadTopicQuiz();},2000);
+  } else if(attDone>=3){
+    resEl.innerHTML=`<div class="alert alert-danger">Scored ${correct}/${total} (${pct}%). No attempts remaining for this topic. Please review the material and try again later.</div>`;
+    state.sessionScores.push({topic:topic.topic,pct,passed:false});
+    setTimeout(()=>{state.currentTopicIdx++;loadTopicQuiz();},2500);
+  } else {
+    const left=3-attDone;
+    resEl.innerHTML=`<div class="alert alert-warn">Scored ${correct}/${total} (${pct}%). Need 70%+ to pass. ${left} attempt${left!==1?'s':''} remaining.</div>`;
+    document.querySelector('#s-quiz .btn-row').innerHTML=`
+      <button onclick="retryTopic()">Retry (${left} left)</button>
+      <button onclick="skipTopic()">Skip topic</button>`;
+  }
+}
+
+function retryTopic(){
+  const topic=state.weakTopics[state.currentTopicIdx];
+  showScreen('s-loading');
+  document.getElementById('loading-msg').textContent='Generating new questions...';
+  generateQuestions(topic).then(qs=>{
+    state.aiQuestions=qs;
+    state.userAnswers={};
+    renderQuiz(topic,state.attempts[topic.topicId]||0);
+  });
+}
+
+function skipTopic(){
+  state.currentTopicIdx++;
+  loadTopicQuiz();
+}
+
+function nextTopic(){
+  state.currentTopicIdx++;
+  loadTopicQuiz();
+}
+
+function finishSession(){
+  const passed=state.sessionScores.filter(s=>s.passed).length;
+  const total=state.sessionScores.length;
+  const newOverall=calcNewOverall();
+  
+  const icon=document.getElementById('done-icon');
+  const heading=document.getElementById('done-heading');
+  const sub=document.getElementById('done-sub');
+  const statsEl=document.getElementById('done-stats');
+  
+  if(passed===total){
+    icon.textContent='';
+    heading.textContent='Session complete!';
+    sub.textContent='You passed all '+total+' topic'+(total!==1?'s':'')+'. Estimated new quiz average: '+newOverall+'%';
+  } else if(passed>0){
+    icon.textContent='';
+    heading.textContent='Partial progress';
+    sub.textContent='Passed '+passed+' of '+total+' topic'+(total!==1?'s':'')+'. Keep reviewing the ones you missed.';
+  } else {
+    icon.textContent='';
+    heading.textContent='More review needed';
+    sub.textContent='Review your course materials for the weak topics, then try again.';
+  }
+  
+  let sh='';
+  state.sessionScores.forEach(s=>{
+    sh+=`<div class="stat">
+      <div class="stat-val" style="font-size:16px">${s.pct}%</div>
+      <div class="stat-lbl">${s.topic}</div>
+    </div>`;
+  });
+  statsEl.innerHTML=sh;
+  showScreen('s-done');
+}
+
+function calcNewOverall(){
+  const base=QUIZ_DATA.quizScores.reduce((a,b)=>a+b.score,0);
+  const baseTotal=QUIZ_DATA.quizScores.reduce((a,b)=>a+b.total,0);
+  let bonus=0,bonusTotal=0;
+  state.sessionScores.forEach(s=>{
+    bonusTotal+=3;
+    bonus+=Math.round(s.pct/100*3);
+  });
+  return Math.round((base+bonus)/(baseTotal+bonusTotal)*100);
+}
+
+(function init(){
+  state.overallPct=calcOverall();
+  state.weakTopics=getWeakTopics();
+  renderOverview();
+  showScreen('s-overview');
+})();
+</script>

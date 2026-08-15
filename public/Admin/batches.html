@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Batches — Mind Route Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css" />
+  <style>
+
+    .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,0.35);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px); }
+    .modal-box { background:var(--white);border-radius:var(--radius-xl);padding:1.75rem;width:100%;max-width:560px;box-shadow:var(--shadow-lg);border:1px solid var(--border);max-height:90vh;overflow-y:auto; }
+    .modal-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem; }
+    .modal-header h3 { font-size:1rem;font-weight:600;color:var(--text-dark); }
+    .modal-close { background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light);line-height:1; }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">A</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Admin</div>
+        <div class="ur">Administrator</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">D</span>Dashboard
+      </a>
+      <div class="nav-label">Management</div>
+      <a href="students.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">S</span>Students
+      </a>
+      <a href="teachers.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">T</span>Teachers
+      </a>
+      <a href="batches.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">B</span>Batches
+      </a>
+      <a href="tests.html" class="nav-item">
+        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">E</span>Entry Tests
+      </a>
+      <div class="nav-label">Account</div>
+      <a href="../login.html" class="nav-item logout" id="logout-btn">
+        <span class="nav-icon">&#x2192;</span>Sign Out
+      </a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left"><span class="topbar-title">Batches</span></div>
+      <div class="topbar-right">
+        <button class="btn btn-primary btn-sm" onclick="openAdminBatchModal(null)">Create Batch</button>
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <span style="font-size:0.85rem">&#x1F514;</span>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header">
+              <h4>Notifications</h4>
+              <button onclick="markAllRead()">Mark all read</button>
+            </div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Batch Management</h1>
+        <p>Create and manage student batches. Each batch maps one teacher per subject.</p>
+      </div>
+      <div class="stats-row" id="batch-stats-row" style="margin-bottom:1.25rem"></div>
+      <div id="admin-batches-grid" class="grid-auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Create / Edit Batch Modal -->
+<div class="modal-overlay" id="admin-batch-modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="abm-modal-title">Create Batch</h3>
+      <button class="modal-close" onclick="closeAdminBatchModal()">&#215;</button>
+    </div>
+    <input type="hidden" id="abm-id">
+
+    <div class="grid-2">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Batch Name</label>
+        <input type="text" class="form-control" id="abm-name" placeholder="MDCAT Alpha 2025">
+      </div>
+      <div class="form-group">
+        <label>Entry Test</label>
+        <!-- onchange fires renderBatchTeacherSlots so dropdowns update -->
+        <select class="form-control" id="abm-entry-test"
+          onchange="renderBatchTeacherSlots()" style="height:36px">
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" class="form-control" id="abm-start">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select class="form-control" id="abm-status">
+          <option value="upcoming">Upcoming</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Per-subject teacher slots — populated by renderBatchTeacherSlots() -->
+    <div class="form-group">
+      <label style="font-size:0.72rem;font-weight:600;text-transform:uppercase;
+                    letter-spacing:0.06em;color:var(--text-mid)">
+        Subject Teachers
+        <span style="font-weight:400;color:var(--text-light);
+                     text-transform:none;letter-spacing:0">
+          — one teacher per subject
+        </span>
+      </label>
+      <div id="abm-teacher-slots"
+        style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+      </div>
+    </div>
+
+    <!-- Student checkboxes -->
+    <div class="form-group">
+      <label>Assign Students</label>
+      <div id="abm-student-list"
+        style="max-height:150px;overflow-y:auto;border:1px solid var(--border);
+               border-radius:var(--radius);padding:0.5rem">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
+      <button class="btn btn-ghost btn-sm" onclick="closeAdminBatchModal()">Cancel</button>
+      <button class="btn btn-danger btn-sm" id="abm-delete-btn"
+        onclick="deleteCurrentBatch()" style="display:none">Delete Batch</button>
+      <button class="btn btn-primary btn-sm" onclick="saveAdminBatch()">Save Batch</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Populate entry test dropdown
+  const etSel = document.getElementById('abm-entry-test');
+  if (etSel) {
+    etSel.innerHTML = ENTRY_TESTS.map(t =>
+      `<option value="${t.id}">${t.name}</option>`
+    ).join('');
+  }
+
+  // Populate student list
+  const sList = document.getElementById('abm-student-list');
+  if (sList) {
+    sList.innerHTML = STUDENTS_DB.length
+      ? STUDENTS_DB.map(s => `
+          <div style="display:flex;align-items:center;gap:0.5rem;
+                      padding:0.35rem 0.5rem;border-radius:4px">
+            <input type="checkbox" id="scb-${s.id}" value="${s.id}">
+            <label for="scb-${s.id}"
+              style="cursor:pointer;font-size:0.82rem;flex:1">
+              <strong>${s.name}</strong>
+              <span style="color:var(--text-light);font-family:var(--font-mono);
+                           font-size:0.7rem;margin-left:6px">${s.rollNo}</span>
+            </label>
+          </div>`).join('')
+      : '<div style="color:var(--text-light);font-size:0.78rem;padding:0.5rem">No students in database.</div>';
+  }
+
+  renderAdminBatches();
+});
+</script>
+</body>
+</html>
