@@ -610,6 +610,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.getElementById('grading-container'))     initGrading();
   if (document.getElementById('teacher-schedule-grid')) renderTeacherSchedule();
 
+  // Admin pages — real multi-page files, same pattern as Student/Teacher above
+  if (document.getElementById('admin-students-tbody'))  renderAdminStudents();
+  if (document.getElementById('admin-teachers-tbody'))  renderAdminTeachers();
+  if (document.getElementById('admin-batches-grid'))    renderAdminBatches();
+  if (document.getElementById('tests-tbody'))           renderTestTags();
+  if (document.getElementById('admin-courses-grid'))    renderAdminCourses();
+  if (document.getElementById('admin-overview'))        renderAdminDashboard();
+
   if (document.getElementById('page-content'))          initAdminSPA();
   if (document.getElementById('login-form'))            setupLogin();
 });
@@ -2579,6 +2587,11 @@ async function deleteClass() {
 
 /** Renders the admin Students table, applying the search box + batch/fee filters. */
 function renderAdminStudents() {
+const batchFilterSel = document.getElementById('admin-batch-filter');
+  if (batchFilterSel && !batchFilterSel.dataset.populated) {
+    batchFilterSel.innerHTML = '<option value="all">All Batches</option>' + BATCHES.map(b => `<option value="${b.name}">${b.name}</option>`).join('');
+    batchFilterSel.dataset.populated = 'true';
+  }
   const tbody   = document.getElementById('admin-students-tbody');
   const countEl = document.getElementById('admin-student-count');
   const search  = (document.getElementById('admin-student-search')?.value || '').toLowerCase();
@@ -2640,10 +2653,12 @@ function openAdminStudentModal(sid) {
     titleEl.textContent = 'Add Student'; delBtn.style.display = 'none';
     ['asm-id', 'asm-name', 'asm-roll', 'asm-email', 'asm-phone', 'asm-city'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('asm-fee-status').value  = 'Unpaid';
+    document.getElementById('asm-password').value = '';
     document.getElementById('asm-total-fee').value   = '';
     document.getElementById('asm-paid-amount').value = '0';
     document.getElementById('asm-attendance').value  = '85';
   }
+  syncEntryTestFromBatch();
   document.getElementById('admin-student-modal').style.display = 'flex';
 }
 function closeAdminStudentModal() { document.getElementById('admin-student-modal').style.display = 'none'; }
@@ -2656,6 +2671,7 @@ async function saveAdminStudent() {
   const email      = document.getElementById('asm-email').value.trim();
   const phone      = document.getElementById('asm-phone').value.trim();
   const city       = document.getElementById('asm-city').value.trim();
+  const password = document.getElementById('asm-password').value.trim();
   const entryTest  = document.getElementById('asm-entry-test').value;
   const batch      = document.getElementById('asm-batch').value;
   const feeStatus  = document.getElementById('asm-fee-status').value;
@@ -2679,13 +2695,15 @@ async function saveAdminStudent() {
       // CREATE — POST to /students
       const created = await apiFetch('/students', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...(password ? { password } : {}) }),
       });
       STUDENTS_DB.push(created.student);
     }
     closeAdminStudentModal();
     renderAdminStudents();
-    showToast(created.tempPassword ? `Student added. Temp password: ${created.tempPassword}` : 'Student added.');
+    showToast(created.tempPassword
+      ? `Student added. Temp password: ${created.tempPassword}`
+      : 'Student added. Login with the password you set.');
   } catch (err) {
     showToast(err.message);
   }
@@ -2725,7 +2743,7 @@ function renderAdminTeachers() {
   if (!tbody) return;
 
   let teachers = TEACHERS_DB;
-  if (search) teachers = teachers.filter(t => t.name.toLowerCase().includes(search) || t.subject.toLowerCase().includes(search));
+  if (search) teachers = teachers.filter(t => t.name.toLowerCase().includes(search) || (t.subjects || []).some(s => s.toLowerCase().includes(search)));
   tbody.innerHTML = '';
   if (!teachers.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No teachers found.</td></tr>'; return; }
 
@@ -2733,7 +2751,7 @@ function renderAdminTeachers() {
     const courseNames = t.courseIds.map(cid => COURSES[cid]?.subject || '?').join(', ') || '—';
     tbody.innerHTML += `<tr>
       <td><div style="font-weight:600">${t.name}</div><div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${t.email}</div></td>
-      <td>${t.subject}</td>
+      <td>${(t.subjects || []).join(', ') || '—'}</td>
       <td style="font-family:var(--font-mono);font-size:0.76rem">${t.phone}</td>
       <td style="font-size:0.78rem;color:var(--text-mid)">${courseNames}</td>
       <td><span class="badge ${t.status === 'active' ? 'badge-green' : 'badge-orange'}">${t.status}</span></td>
@@ -2749,6 +2767,7 @@ function renderAdminTeachers() {
 function openAdminTeacherModal(tid) {
   const titleEl = document.getElementById('atm-modal-title');
   const delBtn  = document.getElementById('atm-delete-btn');
+  const pwEl = document.getElementById('atm-password');
   if (tid) {
     const t = TEACHERS_DB.find(x => x.id === tid); if (!t) return;
     titleEl.textContent = 'Edit Teacher'; delBtn.style.display = 'inline-flex';
@@ -2756,12 +2775,15 @@ function openAdminTeacherModal(tid) {
     document.getElementById('atm-name').value    = t.name;
     document.getElementById('atm-email').value   = t.email;
     document.getElementById('atm-phone').value   = t.phone;
-    document.getElementById('atm-subject').value = t.subject;
     document.getElementById('atm-status').value  = t.status;
+    renderTeacherSubjectCheckboxes(t.subjects || []);
+    if (pwEl) { pwEl.value = ''; pwEl.closest('.form-group').style.display = 'none'; }
   } else {
     titleEl.textContent = 'Add Teacher'; delBtn.style.display = 'none';
-    ['atm-id', 'atm-name', 'atm-email', 'atm-phone', 'atm-subject'].forEach(id => document.getElementById(id).value = '');
+    ['atm-id', 'atm-name', 'atm-email', 'atm-phone'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('atm-status').value = 'active';
+    renderTeacherSubjectCheckboxes([]);
+    if (pwEl) { pwEl.value = ''; pwEl.closest('.form-group').style.display = 'block'; }
   }
   document.getElementById('admin-teacher-modal').style.display = 'flex';
 }
@@ -2773,24 +2795,35 @@ async function saveAdminTeacher() {
   const name    = document.getElementById('atm-name').value.trim();
   const email   = document.getElementById('atm-email').value.trim();
   const phone   = document.getElementById('atm-phone').value.trim();
-  const subject = document.getElementById('atm-subject').value.trim();
   const status  = document.getElementById('atm-status').value;
-  if (!name || !email) { showToast('Name and email are required.'); return; }
+  const subjects = [...document.querySelectorAll('.atm-subject-cb:checked')].map(cb => cb.value);
+  const password = (document.getElementById('atm-password')?.value || '').trim();
 
-  const payload = { name, email, phone, subject, status };
+  if (!name || !email) { showToast('Name and email are required.'); return; }
+  if (!subjects.length) { showToast('Select at least one subject.'); return; }
+
+  const payload = { name, email, phone, subjects, status };
 
   try {
     if (id) {
       const updated = await apiFetch(`/teachers/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
       const idx = TEACHERS_DB.findIndex(t => t.id === id);
       if (idx !== -1) TEACHERS_DB[idx] = updated;
+      closeAdminTeacherModal();
+      renderAdminTeachers();
+      showToast('Teacher updated.');
     } else {
-      const created = await apiFetch('/teachers', { method: 'POST', body: JSON.stringify(payload) });
+      const created = await apiFetch('/teachers', {
+        method: 'POST',
+        body: JSON.stringify({ ...payload, ...(password ? { password } : {}) }),
+      });
       TEACHERS_DB.push(created.teacher);
+      closeAdminTeacherModal();
+      renderAdminTeachers();
+      showToast(created.tempPassword
+        ? `Teacher added. Temp password: ${created.tempPassword}`
+        : 'Teacher added. Login with the password you set.');
     }
-    closeAdminTeacherModal();
-    renderAdminTeachers();
-    showToast(created.tempPassword ? `Teacher added. Temp password: ${created.tempPassword}` : 'Teacher added.');
   } catch (err) {
     showToast(err.message);
   }
@@ -2842,7 +2875,10 @@ function openEditTestSubjects(tid) {
         <button onclick="closeEditTestSubjects()" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light)">&#215;</button>
       </div>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
-        <input type="text" class="form-control" id="edit-test-subject-inp" placeholder="Add subject..." style="flex:1">
+        <select class="form-control" id="edit-test-subject-inp" style="flex:1">
+          <option value="">— Choose subject —</option>
+          ${SUBJECTS_DB.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+        </select>
         <button class="btn btn-outline btn-sm" onclick="addSubjectToEditTest()">Add</button>
       </div>
       <div id="edit-test-subjects-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:1rem"></div>
@@ -2853,19 +2889,19 @@ function openEditTestSubjects(tid) {
     </div>`;
   modal.style.display = 'flex';
   renderEditTestSubjectTags();
-  document.getElementById('edit-test-subject-inp').focus();
 }
 
 function addSubjectToEditTest() {
-  const inp = document.getElementById('edit-test-subject-inp');
-  if (!inp || !inp.value.trim()) return;
-  const sub = inp.value.trim();
+  const sel = document.getElementById('edit-test-subject-inp');
+  if (!sel || !sel.value) return;
+  const sub = sel.value;
   if (!window._editTestSubjects.includes(sub)) {
     window._editTestSubjects.push(sub);
     renderEditTestSubjectTags();
   }
-  inp.value = ''; inp.focus();
+  sel.value = '';
 }
+
 function removeEditTestSubject(sub) {
   window._editTestSubjects = window._editTestSubjects.filter(s => s !== sub);
   renderEditTestSubjectTags();
@@ -3173,10 +3209,11 @@ const ADMIN_ROUTES = {
             <div class="form-group"><label>Full Name</label><input type="text" class="form-control" id="asm-name"></div>
             <div class="form-group"><label>Roll Number</label><input type="text" class="form-control" id="asm-roll"></div>
             <div class="form-group"><label>Email</label><input type="email" class="form-control" id="asm-email"></div>
+            <div class="form-group"><label>Password (optional)</label><input type="password" class="form-control" id="asm-password" placeholder="Leave blank to auto-generate"></div>
             <div class="form-group"><label>Phone</label><input type="text" class="form-control" id="asm-phone"></div>
             <div class="form-group"><label>City</label><input type="text" class="form-control" id="asm-city"></div>
             <div class="form-group"><label>Entry Test</label><select class="form-control" id="asm-entry-test">${ENTRY_TESTS.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Batch</label><select class="form-control" id="asm-batch">${BATCHES.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}</select></div>
+            <div class="form-group"><label>Batch</label><select class="form-control" id="asm-batch" onchange="syncEntryTestFromBatch()">${BATCHES.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}</select></div>
             <div class="form-group"><label>Fee Status</label><select class="form-control" id="asm-fee-status"><option value="Unpaid">Unpaid</option><option value="Partially Paid">Partially Paid</option><option value="Paid">Paid</option></select></div>
             <div class="form-group"><label>Total Fee (Rs.)</label><input type="number" class="form-control" id="asm-total-fee"></div>
             <div class="form-group"><label>Amount Paid (Rs.)</label><input type="number" class="form-control" id="asm-paid-amount"></div>
@@ -3210,7 +3247,11 @@ const ADMIN_ROUTES = {
             <div class="form-group"><label>Full Name</label><input type="text" class="form-control" id="atm-name"></div>
             <div class="form-group"><label>Email</label><input type="email" class="form-control" id="atm-email"></div>
             <div class="form-group"><label>Phone</label><input type="text" class="form-control" id="atm-phone"></div>
-            <div class="form-group"><label>Subject</label><input type="text" class="form-control" id="atm-subject"></div>
+            <div class="form-group" style="grid-column:1/-1">
+              <label>Subjects Taught</label>
+              <div id="atm-subjects-list" style="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>
+            </div>
+            <div class="form-group"><label>Password (optional)</label><input type="password" class="form-control" id="atm-password" placeholder="Leave blank to auto-generate"></div>
             <div class="form-group"><label>Status</label><select class="form-control" id="atm-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
           </div>
           <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
@@ -3335,7 +3376,67 @@ const ADMIN_ROUTES = {
       if (sl) sl.innerHTML = '';
     }
   },
+  courses: {
+    title: 'Courses',
+    topbarAction: () => `<button class="btn btn-primary btn-sm" onclick="openAdminCourseModal()">Add Course</button>`,
+    html: () => `
+      <div class="page-header"><h1>Course Management</h1><p>Create courses and hand off curriculum editing to teachers.</p></div>
+      <div id="admin-courses-grid" class="grid-auto"></div>
+      <div class="modal-overlay" id="admin-course-modal" style="display:none">
+        <div class="modal-box">
+          <div class="modal-header"><h3>Add Course</h3><button class="modal-close" onclick="closeAdminCourseModal()">&#215;</button></div>
+          <div class="grid-2">
+            <div class="form-group"><label>Title</label><input type="text" class="form-control" id="acm2-title" placeholder="MDCAT Biology Intensive"></div>
+            <div class="form-group">
+              <label>Subject</label>
+              <select class="form-control" id="acm2-subject">
+                ${SUBJECTS_DB.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group"><label>Icon (1 letter)</label><input type="text" class="form-control" id="acm2-icon" maxlength="1" placeholder="B"></div>
+            <div class="form-group"><label>Teacher</label>
+              <select class="form-control" id="acm2-teacher">
+                ${TEACHERS_DB.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" style="grid-column:1/-1"><label>Description</label><textarea class="form-control" id="acm2-desc"></textarea></div>
+          </div>
+          <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
+            <button class="btn btn-ghost btn-sm" onclick="closeAdminCourseModal()">Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="saveAdminCourse()">Save</button>
+          </div>
+        </div>
+      </div>`,
+    render: renderAdminCourses,
+  },
 };
+
+function renderTeacherSubjectCheckboxes(selected = []) {
+  const el = document.getElementById('atm-subjects-list');
+  if (!el) return;
+  if (!SUBJECTS_DB.length) {
+    el.innerHTML = '<span style="font-size:0.78rem;color:var(--text-light)">No subjects defined yet — add some in Entry Tests first.</span>';
+    return;
+  }
+  el.innerHTML = SUBJECTS_DB.map(s => `
+    <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer">
+      <input type="checkbox" class="atm-subject-cb" value="${s.name}" ${selected.includes(s.name) ? 'checked' : ''}>
+      ${s.name}
+    </label>`).join('');
+}
+
+function syncEntryTestFromBatch() {
+  const batchName = document.getElementById('asm-batch').value;
+  const batch = BATCHES.find(b => b.name === batchName);
+  const etSel = document.getElementById('asm-entry-test');
+  if (batch && etSel) {
+    etSel.value = batch.entryTest;
+    etSel.disabled = true;
+  } else if (etSel) {
+    etSel.disabled = false;
+  }
+}
+
 
 // ── Batch CRUD (one teacher per subject, via `subjectTeachers`) ────────────
 
@@ -3413,9 +3514,26 @@ function openAdminBatchModal(bid) {
   const modal = document.getElementById('admin-batch-modal');
   if (!modal) return;
 
+  // Build the static parts that a page-specific inline script used to build
+  const etSel = document.getElementById('abm-entry-test');
+  if (etSel) etSel.innerHTML = ENTRY_TESTS.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+  const sList = document.getElementById('abm-student-list');
+  if (sList) {
+    sList.innerHTML = STUDENTS_DB.length
+      ? STUDENTS_DB.map(s => `
+          <div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;border-radius:4px">
+            <input type="checkbox" id="scb-${s.id}" value="${s.id}">
+            <label for="scb-${s.id}" style="cursor:pointer;font-size:0.82rem;flex:1">
+              <strong>${s.name}</strong>
+              <span style="color:var(--text-light);font-family:var(--font-mono);font-size:0.7rem;margin-left:6px">${s.rollNo}</span>
+            </label>
+          </div>`).join('')
+      : '<div style="color:var(--text-light);font-size:0.78rem;padding:0.5rem">No students in database.</div>';
+  }
+
   const titleEl = document.getElementById('abm-modal-title');
   const delBtn  = document.getElementById('abm-delete-btn');
-  let currentSubjectTeachers = {}; // e.g. { Biology: 'T001', Physics: 'T002' }
+  let currentSubjectTeachers = {};
   let currentStudentIds = [];
 
   if (bid) {
@@ -3452,9 +3570,80 @@ function openAdminBatchModal(bid) {
 
   modal.style.display = 'flex';
 }
+
 function closeAdminBatchModal() {
   const modal = document.getElementById('admin-batch-modal');
   if (modal) modal.style.display = 'none';
+}
+
+
+function renderAdminCourses() {
+  const grid = document.getElementById('admin-courses-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  const courses = Object.values(COURSES);
+  if (!courses.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-light)">No courses yet — click "Add Course" to create one.</div>';
+    return;
+  }
+  courses.forEach(c => {
+    grid.innerHTML += `
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
+          <div style="width:36px;height:36px;border-radius:var(--radius);background:${c.colorLight};color:${c.color};display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:700">${c.icon}</div>
+          <div><div style="font-weight:600">${c.title}</div><div style="font-size:0.72rem;color:var(--text-light)">${c.subject} · ${c.teacher}</div></div>
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-mid);margin-bottom:0.75rem">${c.description}</p>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="deleteAdminCourse(${c.id})">Delete</button>
+        </div>
+      </div>`;
+  });
+}
+
+function openAdminCourseModal() {
+  ['acm2-title', 'acm2-icon', 'acm2-desc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('admin-course-modal').style.display = 'flex';
+}
+function closeAdminCourseModal() { document.getElementById('admin-course-modal').style.display = 'none'; }
+
+async function saveAdminCourse() {
+  const title = document.getElementById('acm2-title').value.trim();
+  const subject = document.getElementById('acm2-subject').value;
+  const icon = document.getElementById('acm2-icon').value.trim().toUpperCase() || subject[0];
+  const teacher = document.getElementById('acm2-teacher').value;
+  const description = document.getElementById('acm2-desc').value.trim();
+  if (!title || !subject) { showToast('Title and subject are required.'); return; }
+
+  const existingIds = Object.keys(COURSES).map(Number);
+  const id = existingIds.length ? Math.max(...existingIds) + 1 : 1;
+  const colors = { '#1B5FAD': '#EBF2FB' }; // fallback map, extend as needed
+  const color = '#1B5FAD';
+
+  try {
+    const created = await apiFetch('/courses', {
+      method: 'POST',
+      body: JSON.stringify({ id, title, subject, icon, color, colorLight: '#EBF2FB', teacher, description, weeks: [] }),
+    });
+    COURSES[created.id] = created;
+    closeAdminCourseModal();
+    renderAdminCourses();
+    showToast('Course created.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function deleteAdminCourse(id) {
+  if (!confirm('Delete this course? Students enrolled in it will lose access.')) return;
+  try {
+    await apiFetch(`/courses/${id}`, { method: 'DELETE' });
+    delete COURSES[id];
+    renderAdminCourses();
+    showToast('Course removed.');
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 /** Reads the batch modal's fields (including the per-subject teacher dropdowns), then creates/updates the batch and syncs each selected student's `batch` field. */

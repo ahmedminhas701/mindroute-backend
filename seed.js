@@ -107,6 +107,35 @@ async function seed() {
     fees: [],
   });
 
+  const Course = require('./models/Course');
+  await Course.deleteMany({});
+  await Course.create({
+    id: 1,
+    title: 'MDCAT Biology Intensive',
+    subject: 'Biology',
+    icon: 'B',
+    color: '#1B5FAD',
+    colorLight: '#EBF2FB',
+    teacher: 'Ms. Ayesha Noor',
+    description: 'Complete MDCAT Biology curriculum.',
+    weeks: [
+      {
+        num: 1,
+        title: 'Cell Biology',
+        uploadedDate: 'Aug 1, 2026',
+        topics: [
+          {
+            id: 't1', num: '1.1', title: 'Introduction to the Cell', dueDate: null,
+            contents: [
+              { type: 'video', label: 'Recorded Lecture', duration: '18:30' },
+              { type: 'notes', label: 'Written Notes' },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
   console.log('\nSeed complete. Login with:');
   console.log('  admin@mindroute.pk   / admin1234');
   console.log('  teacher@mindroute.pk / teacher1234');

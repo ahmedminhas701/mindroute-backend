@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const router = express.Router();
 
 const User = require('../models/User');
-const { protect } = require('../middleware/auth');
+const { protect, restrictTo } = require('../middleware/auth');
 
 function signToken(user) {
   return jwt.sign(
@@ -51,5 +51,23 @@ router.get('/me', protect, (req, res) => {
 router.post('/logout', protect, (req, res) => {
   res.json({ message: 'Logged out.' });
 });
+
+// POST /api/auth/create-admin — only an existing admin can create another
+// admin. No public registration path for this role, on purpose.
+router.post('/create-admin', protect, restrictTo('admin'), async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required.' });
+    }
+    const hashed = await bcrypt.hash(password, 10);
+    const user = await User.create({ name, email: email.toLowerCase().trim(), password: hashed, role: 'admin' });
+    res.status(201).json({ id: user._id, email: user.email, name: user.name, role: user.role });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ message: 'That email is already registered.' });
+    res.status(400).json({ message: 'Failed to create admin.', error: err.message });
+  }
+});
+
 
 module.exports = router;

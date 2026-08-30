@@ -18,6 +18,23 @@ function serialize(batch) {
   return obj;
 }
 
+const EntryTest = require('../models/EntryTest');
+const Course = require('../models/Course');
+
+async function enrollStudentsInBatchCourses(studentIds, entryTestId) {
+  if (!studentIds?.length || !entryTestId) return;
+  const entryTest = await EntryTest.findOne({ id: entryTestId });
+  if (!entryTest) return;
+  const courses = await Course.find({ subject: { $in: entryTest.subjects } });
+  const courseIds = courses.map(c => c.id);
+  if (!courseIds.length) return;
+  await Student.updateMany(
+    { id: { $in: studentIds } },
+    { $addToSet: { enrolledCourseIds: { $each: courseIds } } }
+  );
+}
+
+
 // GET /api/batches
 router.get('/', async (req, res) => {
   const batches = await Batch.find({}).sort({ startDate: -1 });
@@ -55,6 +72,7 @@ router.post('/', restrictTo('admin'), async (req, res) => {
         { $set: { batch: req.body.name } }
       );
     }
+    await enrollStudentsInBatchCourses(req.body.studentIds, req.body.entryTestId);
     res.status(201).json(serialize(batch));
   } catch (err) {
     res.status(400).json({ message: 'Failed to create batch.', error: err.message });
