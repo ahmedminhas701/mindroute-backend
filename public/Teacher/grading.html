@@ -190,100 +190,31 @@
   </div>
 </div>
 
+<script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
-<script>
-// Preview auto grade as teacher types marks
-function previewAutoGrade() {
-  const marks = parseFloat(document.getElementById('gm-marks').value);
-  const total = parseFloat(document.getElementById('gm-total').value);
-  const preview = document.getElementById('gm-auto-preview');
-  const autoGradeEl = document.getElementById('gm-auto-grade');
-  if (!isNaN(marks) && !isNaN(total) && total > 0) {
-    const pct = Math.round(marks / total * 100);
-    const grade = calcGradeFromThreshold(pct);
-    autoGradeEl.textContent = grade + ' (' + pct + '%)';
-    preview.style.display = 'block';
-  } else {
-    preview.style.display = 'none';
-  }
-}
+<!-- The inline <script> that used to sit here has been removed. It defined
+     previewAutoGrade(), submitGrade(), submitAndApproveGrade() and a
+     DOMContentLoaded handler, and every one of the four was broken:
 
-// Save marks only (no approval yet)
-function submitGrade() {
-  const studentId = document.getElementById('gm-student-id').value;
-  const itemId    = document.getElementById('gm-item-id').value;
-  const type      = document.getElementById('gm-item-type').value;
-  const marks     = parseFloat(document.getElementById('gm-marks').value);
-  const total     = parseFloat(document.getElementById('gm-total').value);
-  const gradeLtr  = document.getElementById('gm-grade-letter').value;
-  const feedback  = document.getElementById('gm-feedback').value.trim();
-  if (isNaN(marks) || isNaN(total) || total <= 0) { showToast('Enter valid marks.'); return; }
-  if (marks > total) { showToast('Marks cannot exceed total.'); return; }
-  const student = STUDENTS_DB.find(s => s.id === studentId);
-  const pct = Math.round(marks / total * 100);
-  const computedGrade = gradeLtr || calcGradeFromThreshold(pct);
-  if (type === 'assign') {
-    const item = student.assignments.find(a => a.id === itemId);
-    item.marks = marks; item.totalMarks = total;
-    item.grade = computedGrade;
-    item.manualGrade = !!gradeLtr;
-    item.feedback = feedback;
-  } else {
-    const item = student.quizScores.find(q => q.id === itemId);
-    item.score = marks; item.feedback = feedback;
-  }
-  saveStudentsDB();
-  closeGradeModal();
-  renderGrading();
-  showToast('Marks saved.');
-}
+       * It loaded AFTER app.js, so its submitGrade() SHADOWED the validated
+         one in app.js. The page ran this copy, not the fixed one, which is why
+         earlier fixes to submitGrade() had no visible effect at all.
+       * Both save functions mutated STUDENTS_DB in memory and then called
+         saveStudentsDB(), which exists nowhere in this codebase (it is a
+         leftover from the localStorage prototype). So they threw a
+         ReferenceError AFTER changing the in-memory record but BEFORE
+         closeGradeModal()/renderGrading(). Symptom: clicking "Save Marks" or
+         "Save & Approve" left the modal open, saved nothing to the database,
+         and showed the new marks until the next reload wiped them.
+       * submitAndApproveGrade() also called autoUpdateAttendance(), which also
+         does not exist anywhere.
+       * The DOMContentLoaded handler filled #grade-filter-course from COURSES,
+         but app.js registers its own DOMContentLoaded listener first and that
+         listener is async: it yields at `await loadAppData()`. So this one ran
+         while COURSES was still empty and the filter never got any options.
 
-// Save + approve in one click
-function submitAndApproveGrade() {
-  const studentId = document.getElementById('gm-student-id').value;
-  const itemId    = document.getElementById('gm-item-id').value;
-  const type      = document.getElementById('gm-item-type').value;
-  const marks     = parseFloat(document.getElementById('gm-marks').value);
-  const total     = parseFloat(document.getElementById('gm-total').value);
-  const gradeLtr  = document.getElementById('gm-grade-letter').value;
-  const feedback  = document.getElementById('gm-feedback').value.trim();
-  if (isNaN(marks) || isNaN(total) || total <= 0) { showToast('Enter valid marks.'); return; }
-  if (marks > total) { showToast('Marks cannot exceed total.'); return; }
-  const student = STUDENTS_DB.find(s => s.id === studentId);
-  const pct = Math.round(marks / total * 100);
-  const computedGrade = gradeLtr || calcGradeFromThreshold(pct);
-  if (type === 'assign') {
-    const item = student.assignments.find(a => a.id === itemId);
-    item.marks = marks; item.totalMarks = total;
-    item.grade = computedGrade;
-    item.manualGrade = !!gradeLtr;
-    item.feedback = feedback;
-    item.approved = true;
-    autoUpdateAttendance(student);
-  } else {
-    const item = student.quizScores.find(q => q.id === itemId);
-    item.score = marks; item.feedback = feedback;
-  }
-  saveStudentsDB();
-  closeGradeModal();
-  renderGrading();
-  showToast('Grade approved: ' + computedGrade);
-}
-
-// Populate course filter on load
-document.addEventListener('DOMContentLoaded', () => {
-  const cf = document.getElementById('grade-filter-course');
-  if (cf) {
-    getTeacherCourseIds().forEach(cid => {
-      if (COURSES[cid]) {
-        const opt = document.createElement('option');
-        opt.value = cid;
-        opt.textContent = COURSES[cid].title;
-        cf.appendChild(opt);
-      }
-    });
-  }
-});
-</script>
+     All four now live in app.js (previewAutoGrade, submitGrade,
+     submitAndApproveGrade, and the filter population inside initGrading()),
+     which the router calls after the data has loaded. -->
 </body>
 </html>

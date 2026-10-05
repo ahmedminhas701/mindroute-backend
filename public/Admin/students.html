@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
-  
+
   <link rel="stylesheet" href="../css/styles.css" />
   <style>
 
@@ -19,7 +19,7 @@
     }
     .modal-box {
       background:var(--white);border-radius:var(--radius-xl);
-      padding:1.75rem;width:100%;max-width:520px;
+      padding:1.75rem;width:100%;max-width:660px;
       box-shadow:var(--shadow-lg);border:1px solid var(--border);
       max-height:90vh;overflow-y:auto;
     }
@@ -49,20 +49,23 @@
     <nav class="sidebar-nav">
       <div class="nav-label">Overview</div>
       <a href="dashboard.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">D</span>Dashboard
+        <span class="nav-icon">⊞</span>Dashboard
       </a>
       <div class="nav-label">Management</div>
       <a href="students.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">S</span>Students
+        <span class="nav-icon">◎</span>Students
       </a>
       <a href="teachers.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">T</span>Teachers
+        <span class="nav-icon">◈</span>Teachers
+      </a>
+      <a href="courses.html" class="nav-item">
+        <span class="nav-icon">▤</span>Courses
       </a>
       <a href="batches.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">B</span>Batches
+        <span class="nav-icon">▦</span>Batches
       </a>
       <a href="tests.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">E</span>Entry Tests
+        <span class="nav-icon">◫</span>Entry Tests
       </a>
       <div class="nav-label">Account</div>
       <a href="../login.html" class="nav-item logout" id="logout-btn">
@@ -112,14 +115,18 @@
             <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.3rem">Batch</label>
             <select class="form-control" id="admin-batch-filter" onchange="renderAdminStudents()" style="height:36px"></select>
           </div>
+          <!-- Both of these are filled from the shared validator's lists by
+               renderAdminStudents(), not hard-coded. They used to be written out
+               here as "Unpaid" / "Partially Paid", which no longer matched the
+               stored values ("Pending" / "Partial"), so picking either filter
+               returned zero students and looked like the data was missing. -->
           <div style="min-width:160px">
             <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.3rem">Fee Status</label>
-            <select class="form-control" id="admin-fee-filter" onchange="renderAdminStudents()" style="height:36px">
-              <option value="all">All Statuses</option>
-              <option value="Paid">Paid</option>
-              <option value="Partially Paid">Partially Paid</option>
-              <option value="Unpaid">Unpaid</option>
-            </select>
+            <select class="form-control" id="admin-fee-filter" onchange="renderAdminStudents()" style="height:36px"></select>
+          </div>
+          <div style="min-width:160px">
+            <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.3rem">Entry Test</label>
+            <select class="form-control" id="admin-test-filter" onchange="renderAdminStudents()" style="height:36px"></select>
           </div>
         </div>
       </div>
@@ -138,7 +145,7 @@
                 <th>Batch</th>
                 <th>Entry Test</th>
                 <th>Attendance</th>
-                <th>Fee Status</th>
+                <th>Fees</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -150,7 +157,16 @@
   </div>
 </div>
 
-<!-- Add/Edit Student Modal -->
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Add/Edit Student Modal
+
+     Input ids are `asm-<fieldName>` where <fieldName> exactly matches a key in
+     MRValidate.STUDENT_RULES. That is not cosmetic: the API returns validation
+     failures as { errors: { guardianPhone: "..." } }, and applyFieldErrors()
+     turns each key into the id `asm-guardianPhone` to paint the message under
+     the right input. Rename a field here and the error silently stops
+     appearing, so keep the two in step.
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div class="modal-overlay" id="admin-student-modal" style="display:none">
   <div class="modal-box">
     <div class="modal-header">
@@ -158,259 +174,128 @@
       <button class="modal-close" onclick="closeAdminStudentModal()">&#215;</button>
     </div>
     <input type="hidden" id="asm-id">
+
+    <div class="form-section-label">Student Details</div>
     <div class="grid-2">
       <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" class="form-control" id="asm-name" placeholder="Student full name">
+        <label class="req">Full Name</label>
+        <input type="text" class="form-control" id="asm-name" placeholder="Fatima Khan" maxlength="60">
       </div>
       <div class="form-group">
-        <label>Roll Number</label>
-        <input type="text" class="form-control" id="asm-roll" placeholder="MR-24-MDCAT-001">
+        <label class="req">Roll Number</label>
+        <input type="text" class="form-control" id="asm-rollNo" placeholder="MR-24-MDCAT-001" maxlength="20">
+        <span class="field-hint">Letters, digits, - and / only. Must be unique.</span>
       </div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" class="form-control" id="asm-email" placeholder="student@email.com">
+        <label class="req">Email</label>
+        <input type="email" class="form-control" id="asm-email" placeholder="fatima@email.com" maxlength="120">
+        <span class="field-hint">Doubles as the login username.</span>
       </div>
       <div class="form-group">
-        <label>Phone</label>
-        <input type="text" class="form-control" id="asm-phone" placeholder="0300-0000000">
+        <label class="req">Phone</label>
+        <input type="tel" class="form-control" id="asm-phone" placeholder="0300-1234567" inputmode="tel">
+        <span class="field-hint">Pakistani mobile — 03XX-XXXXXXX or +923XXXXXXXXX.</span>
       </div>
       <div class="form-group">
-        <label>City</label>
-        <input type="text" class="form-control" id="asm-city" placeholder="Karachi">
+        <label class="req">Gender</label>
+        <select class="form-control" id="asm-gender"></select>
+      </div>
+      <div class="form-group">
+        <label class="req">Date of Birth</label>
+        <input type="date" class="form-control" id="asm-dob">
+        <span class="field-hint">Must be 10–60 years old.</span>
+      </div>
+      <div class="form-group">
+        <label>CNIC / B-Form</label>
+        <input type="text" class="form-control" id="asm-cnic" placeholder="35202-1234567-1" inputmode="numeric">
+        <span class="field-hint">Optional for under-18s who have no CNIC yet.</span>
+      </div>
+      <div class="form-group">
+        <label>Previous School / College</label>
+        <input type="text" class="form-control" id="asm-previousSchool" placeholder="Govt. College Lahore" maxlength="100">
+      </div>
+    </div>
+
+    <div class="form-section-label">Guardian &amp; Contact</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="req">Guardian Name</label>
+        <input type="text" class="form-control" id="asm-guardianName" placeholder="Parent or guardian" maxlength="60">
+      </div>
+      <div class="form-group">
+        <label class="req">Guardian Phone</label>
+        <input type="tel" class="form-control" id="asm-guardianPhone" placeholder="0321-7654321" inputmode="tel">
+        <span class="field-hint">Must differ from the student's own number.</span>
+      </div>
+      <div class="form-group">
+        <label class="req">City</label>
+        <input type="text" class="form-control" id="asm-city" placeholder="Karachi" maxlength="40">
+      </div>
+      <div class="form-group">
+        <label>Address</label>
+        <input type="text" class="form-control" id="asm-address" placeholder="House 12, Street 4, Gulberg" maxlength="200">
+      </div>
+    </div>
+
+    <div class="form-section-label">Enrolment</div>
+    <div class="grid-2">
+      <!-- Both dropdowns are filled when the modal OPENS, from ENTRY_TESTS and
+           BATCHES. Filling them at page-parse time gave permanently empty
+           selects, because those arrays are populated by an async fetch that
+           hasn't resolved yet when the HTML is parsed. -->
+      <div class="form-group">
+        <label>Batch</label>
+        <select class="form-control" id="asm-batch" onchange="syncEntryTestFromBatch()"></select>
+        <span class="field-hint">Picking a batch sets the entry test and enrols them in its courses.</span>
       </div>
       <div class="form-group">
         <label>Entry Test</label>
-        <select class="form-control" id="asm-entry-test"></select>
+        <select class="form-control" id="asm-entryTest"></select>
+      </div>
+    </div>
+
+    <div class="form-section-label">Fees</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="req">Fee Status</label>
+        <select class="form-control" id="asm-feeStatus"></select>
       </div>
       <div class="form-group">
-        <label>Batch</label>
-        <select class="form-control" id="asm-batch"></select>
+        <label class="req">Total Fee (Rs.)</label>
+        <input type="number" class="form-control" id="asm-totalFee" placeholder="60000" min="0" max="10000000" step="1">
       </div>
       <div class="form-group">
-        <label>Fee Status</label>
-        <select class="form-control" id="asm-fee-status">
-          <option value="Unpaid">Unpaid</option>
-          <option value="Partially Paid">Partially Paid</option>
-          <option value="Paid">Paid</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Total Fee (Rs.)</label>
-        <input type="number" class="form-control" id="asm-total-fee" placeholder="60000">
-      </div>
-      <div class="form-group">
-        <label>Amount Paid (Rs.)</label>
-        <input type="number" class="form-control" id="asm-paid-amount" placeholder="0">
+        <label class="req">Amount Paid (Rs.)</label>
+        <input type="number" class="form-control" id="asm-paidAmount" placeholder="0" min="0" max="10000000" step="1">
+        <span class="field-hint">Cannot exceed the total fee.</span>
       </div>
       <div class="form-group">
         <label>Attendance %</label>
-        <input type="number" class="form-control" id="asm-attendance" placeholder="85" min="0" max="100">
+        <input type="number" class="form-control" id="asm-attendance" placeholder="0" min="0" max="100" step="1">
+        <span class="field-hint">Leave at 0 for a new student — it is recalculated from attendance records.</span>
       </div>
     </div>
-    <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
+
+    <!-- Add-only, for the same reason as the teacher form: the API never returns
+         a stored password, so there is nothing to prefill on edit. -->
+    <div id="asm-password-wrap">
+      <div class="form-section-label">Login</div>
+      <div class="form-group">
+        <label>Temporary Password</label>
+        <input type="text" class="form-control" id="asm-password" placeholder="Leave blank to auto-generate" maxlength="72" autocomplete="off">
+        <span class="field-hint">Minimum 6 characters. If blank, one is generated and shown to you once.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:1rem">
       <button class="btn btn-ghost btn-sm" onclick="closeAdminStudentModal()">Cancel</button>
       <button class="btn btn-danger btn-sm" id="asm-delete-btn" onclick="deleteCurrentStudent()" style="display:none">Delete Student</button>
-      <button class="btn btn-primary btn-sm" onclick="saveAdminStudent()">Save</button>
+      <button class="btn btn-primary btn-sm" id="asm-save-btn" onclick="saveAdminStudent()">Save</button>
     </div>
   </div>
 </div>
 
+<script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
-<!-- <script>
-// Shared DB (mirrors dashboard.html definition — must stay in sync via localStorage)
-// let TEACHERS_DB = JSON.parse(localStorage.getItem('mr_teachers_db') || 'null') || [
-//   { id:'T001', name:'Ms. Ayesha Noor',  email:'teacher@mindroute.pk', phone:'0300-1111111', subject:'Biology',   status:'active', courseIds:[1], joinDate:'Aug 1, 2024' },
-//   { id:'T002', name:'Dr. Kamran Baig',  email:'kamran@mindroute.pk',  phone:'0321-2222222', subject:'Physics',   status:'active', courseIds:[2], joinDate:'Aug 1, 2024' },
-//   { id:'T003', name:'Mr. Tariq Mahmood',email:'tariq@mindroute.pk',   phone:'0333-3333333', subject:'Chemistry', status:'active', courseIds:[3], joinDate:'Aug 5, 2024' },
-//   { id:'T004', name:'Ms. Hira Zuberi',  email:'hira@mindroute.pk',    phone:'0345-4444444', subject:'English',   status:'inactive', courseIds:[], joinDate:'Sep 1, 2024' },
-// ];
-// let BATCHES = JSON.parse(localStorage.getItem('mr_batches') || 'null') || [
-//   { id:'B001', name:'MDCAT Alpha 2024', entryTest:'MDCAT', teacherId:'T001', startDate:'Sep 1, 2024', status:'active',   studentIds:['S001','S002'] },
-//   { id:'B002', name:'ECAT Beta 2024',   entryTest:'ECAT',  teacherId:'T002', startDate:'Sep 5, 2024', status:'active',   studentIds:['S003'] },
-//   { id:'B003', name:'NTS Morning 2024', entryTest:'NTS',   teacherId:'T003', startDate:'Oct 1, 2024', status:'upcoming', studentIds:[] },
-//   { id:'B004', name:'BCAT Evening 2024',entryTest:'BCAT',  teacherId:'T004', startDate:'Oct 5, 2024', status:'upcoming', studentIds:[] },
-// ];
-// function saveTeachersDB() { localStorage.setItem('mr_teachers_db', JSON.stringify(TEACHERS_DB)); }
-// function saveBatches()    { localStorage.setItem('mr_batches',      JSON.stringify(BATCHES)); }
-
-// Populate filters
-function populateFilters() {
-  const batchSel = document.getElementById('admin-batch-filter');
-  if (batchSel) {
-    batchSel.innerHTML = '<option value="all">All Batches</option>';
-    BATCHES.forEach(b => {
-      const opt = document.createElement('option');
-      opt.value = b.name; opt.textContent = b.name;
-      batchSel.appendChild(opt);
-    });
-  }
-}
-
-function renderAdminStudents() {
-  const tbody    = document.getElementById('admin-students-tbody');
-  const countEl  = document.getElementById('admin-student-count');
-  const search   = (document.getElementById('admin-student-search')?.value || '').toLowerCase();
-  const batchF   = document.getElementById('admin-batch-filter')?.value || 'all';
-  const feeF     = document.getElementById('admin-fee-filter')?.value   || 'all';
-  if (!tbody) return;
-
-  let students = STUDENTS_DB;
-  if (search)        students = students.filter(s => s.name.toLowerCase().includes(search) || s.rollNo.toLowerCase().includes(search) || s.email.toLowerCase().includes(search));
-  if (batchF !== 'all') students = students.filter(s => s.batch === batchF);
-  if (feeF  !== 'all') students = students.filter(s => s.feeStatus === feeF);
-
-  if (countEl) countEl.textContent = students.length + ' student' + (students.length !== 1 ? 's' : '');
-
-  tbody.innerHTML = '';
-  if (!students.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No students found.</td></tr>';
-    return;
-  }
-
-  students.forEach(s => {
-    const attColor = s.attendance >= 85 ? 'var(--success)' : s.attendance >= 75 ? 'var(--warning)' : 'var(--danger)';
-    tbody.innerHTML += `<tr>
-      <td>
-        <div style="font-weight:600">${s.name}</div>
-        <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${s.email}</div>
-      </td>
-      <td style="font-family:var(--font-mono);font-size:0.76rem">${s.rollNo}</td>
-      <td>${s.batch}</td>
-      <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${s.entryTest}</span></td>
-      <td><span style="font-family:var(--font-mono);font-weight:600;color:${attColor}">${s.attendance}%</span></td>
-      <td><span class="badge ${s.feeStatus==='Paid'?'badge-green':s.feeStatus==='Partially Paid'?'badge-orange':'badge-red'}">${s.feeStatus}</span></td>
-      <td>
-        <button class="btn btn-ghost btn-sm" onclick="openAdminStudentModal('${s.id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteStudent('${s.id}')">Remove</button>
-      </td>
-    </tr>`;
-  });
-}
-
-let _editingStudentId = null;
-
-function openAdminStudentModal(sid) {
-  _editingStudentId = sid;
-  const titleEl = document.getElementById('asm-modal-title');
-  const delBtn  = document.getElementById('asm-delete-btn');
-
-  // Populate entry test select
-  const etSel = document.getElementById('asm-entry-test');
-  etSel.innerHTML = '';
-  ENTRY_TESTS.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t.name; opt.textContent = t.name;
-    etSel.appendChild(opt);
-  });
-
-  // Populate batch select
-  const bSel = document.getElementById('asm-batch');
-  bSel.innerHTML = '';
-  BATCHES.forEach(b => {
-    const opt = document.createElement('option');
-    opt.value = b.name; opt.textContent = b.name;
-    bSel.appendChild(opt);
-  });
-
-  if (sid) {
-    const s = STUDENTS_DB.find(st => st.id === sid);
-    if (!s) return;
-    titleEl.textContent = 'Edit Student';
-    delBtn.style.display = 'inline-flex';
-    document.getElementById('asm-id').value          = s.id;
-    document.getElementById('asm-name').value        = s.name;
-    document.getElementById('asm-roll').value        = s.rollNo;
-    document.getElementById('asm-email').value       = s.email;
-    document.getElementById('asm-phone').value       = s.phone;
-    document.getElementById('asm-city').value        = s.city;
-    document.getElementById('asm-entry-test').value  = s.entryTest;
-    document.getElementById('asm-batch').value       = s.batch;
-    document.getElementById('asm-fee-status').value  = s.feeStatus;
-    document.getElementById('asm-total-fee').value   = s.totalFee;
-    document.getElementById('asm-paid-amount').value = s.paidAmount;
-    document.getElementById('asm-attendance').value  = s.attendance;
-  } else {
-    titleEl.textContent = 'Add Student';
-    delBtn.style.display = 'none';
-    document.getElementById('asm-id').value          = '';
-    document.getElementById('asm-name').value        = '';
-    document.getElementById('asm-roll').value        = '';
-    document.getElementById('asm-email').value       = '';
-    document.getElementById('asm-phone').value       = '';
-    document.getElementById('asm-city').value        = '';
-    document.getElementById('asm-fee-status').value  = 'Unpaid';
-    document.getElementById('asm-total-fee').value   = '';
-    document.getElementById('asm-paid-amount').value = '0';
-    document.getElementById('asm-attendance').value  = '85';
-  }
-  document.getElementById('admin-student-modal').style.display = 'flex';
-}
-
-function closeAdminStudentModal() {
-  document.getElementById('admin-student-modal').style.display = 'none';
-}
-
-function saveAdminStudent() {
-  const id         = document.getElementById('asm-id').value;
-  const name       = document.getElementById('asm-name').value.trim();
-  const rollNo     = document.getElementById('asm-roll').value.trim();
-  const email      = document.getElementById('asm-email').value.trim();
-  const phone      = document.getElementById('asm-phone').value.trim();
-  const city       = document.getElementById('asm-city').value.trim();
-  const entryTest  = document.getElementById('asm-entry-test').value;
-  const batch      = document.getElementById('asm-batch').value;
-  const feeStatus  = document.getElementById('asm-fee-status').value;
-  const totalFee   = parseInt(document.getElementById('asm-total-fee').value) || 0;
-  const paidAmount = parseInt(document.getElementById('asm-paid-amount').value) || 0;
-  const attendance = parseInt(document.getElementById('asm-attendance').value) || 85;
-
-  if (!name || !email) { showToast('Name and email are required.'); return; }
-
-  if (id) {
-    // Edit
-    const idx = STUDENTS_DB.findIndex(s => s.id === id);
-    if (idx !== -1) {
-      STUDENTS_DB[idx] = { ...STUDENTS_DB[idx], name, rollNo, email, phone, city, entryTest, batch, feeStatus, totalFee, paidAmount, attendance };
-    }
-  } else {
-    // Add
-    const newId = 'S' + String(STUDENTS_DB.length + 1).padStart(3, '0');
-    STUDENTS_DB.push({
-      id: newId, name, rollNo, email, phone, city,
-      batch, entryTest, feeStatus, totalFee, paidAmount, attendance,
-      joinDate: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}),
-      enrolledCourseIds: [], nextDue: '—',
-      attendanceDetail: [], quizScores: [], assignments: [], fees: [],
-    });
-  }
-
-  saveStudentsDB();
-  closeAdminStudentModal();
-  renderAdminStudents();
-  showToast(id ? 'Student updated.' : 'Student added.');
-}
-
-function deleteCurrentStudent() {
-  const id = document.getElementById('asm-id').value;
-  if (id) deleteStudent(id);
-}
-
-function deleteStudent(sid) {
-  if (!confirm('Remove this student? This action cannot be undone.')) return;
-  const idx = STUDENTS_DB.findIndex(s => s.id === sid);
-  if (idx !== -1) STUDENTS_DB.splice(idx, 1);
-  saveStudentsDB();
-  closeAdminStudentModal();
-  renderAdminStudents();
-  showToast('Student removed.');
-}
-
-// Init
-document.addEventListener('DOMContentLoaded', () => {
-  populateFilters();
-  renderAdminStudents();
-});
-</script> -->
 </body>
 </html>

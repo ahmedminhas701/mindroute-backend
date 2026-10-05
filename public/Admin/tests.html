@@ -41,20 +41,23 @@
     <nav class="sidebar-nav">
       <div class="nav-label">Overview</div>
       <a href="dashboard.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">D</span>Dashboard
+        <span class="nav-icon">⊞</span>Dashboard
       </a>
       <div class="nav-label">Management</div>
       <a href="students.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">S</span>Students
+        <span class="nav-icon">◎</span>Students
       </a>
       <a href="teachers.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">T</span>Teachers
+        <span class="nav-icon">◈</span>Teachers
+      </a>
+      <a href="courses.html" class="nav-item">
+        <span class="nav-icon">▤</span>Courses
       </a>
       <a href="batches.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">B</span>Batches
+        <span class="nav-icon">▦</span>Batches
       </a>
       <a href="tests.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">E</span>Entry Tests
+        <span class="nav-icon">◫</span>Entry Tests
       </a>
       <div class="nav-label">Account</div>
       <a href="../login.html" class="nav-item logout" id="logout-btn">
@@ -89,6 +92,47 @@
         <p>Configure entry test programs and the subjects taught in each.</p>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════════════════════
+           Subjects — the master list
+
+           This card is new, and it is the reason the free-text subject inputs
+           could finally be removed everywhere else. Before it existed the only
+           subjects that could ever exist were the ones hard-coded in seed.js,
+           so anyone who needed a subject that wasn't seeded had no option but
+           to type it into a text box — which is exactly how "Bio" / "biology"
+           / "Biology " got into the data and quietly broke the exact-match
+           chain Subject -> EntryTest.subjects -> Course.subject ->
+           Batch.subjectTeachers. A dropdown is only safe to enforce once
+           there's a legitimate way to add to it.
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div class="card" id="admin-subjects-card" style="margin-bottom:1.5rem">
+        <div class="card-title">
+          Subjects
+          <span style="font-weight:400;color:var(--text-light);font-size:0.72rem">— every subject dropdown in the app reads from this list</span>
+        </div>
+        <div style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px">
+            <input type="text" class="form-control" id="new-subject-name" maxlength="40"
+                   placeholder="e.g. Statistics"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();addSubject();}">
+            <span class="field-hint">Stored in Title Case. Adding "biology" when "Biology" already exists is rejected, not duplicated.</span>
+          </div>
+          <button class="btn btn-primary btn-sm" id="add-subject-btn" onclick="addSubject()" style="height:38px">Add Subject</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Subject</th>
+                <th>Depended on by</th>
+                <th style="width:150px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-subjects-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Active tags -->
       <div class="card" style="margin-bottom:1.5rem">
         <div class="card-title">Active Programs</div>
@@ -98,7 +142,7 @@
       <div class="grid-2" style="gap:1.25rem;align-items:start">
 
         <!-- Add new test -->
-        <div class="card">
+        <div class="card" id="add-test-card">
           <div class="card-title">Add New Entry Test</div>
           <div class="form-group">
             <label>Program Name</label>
@@ -110,6 +154,13 @@
           </div>
           <div class="form-group">
             <label>Subjects Taught</label>
+            <!-- This select is filled by renderTestTags() at page-render time,
+                 NOT here. It shipped with only the placeholder option and
+                 nothing ever populated it, so addSubjectToNewTest() could never
+                 add anything and "Add Entry Test" failed 100% of the time (the
+                 server rejects a test with an empty subject list). Populating it
+                 in the markup isn't an option either — SUBJECTS_DB is filled by
+                 an async fetch that hasn't resolved when the HTML is parsed. -->
             <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
               <select class="form-control" id="new-test-subject-inp" style="flex:1" onchange="addSubjectToNewTest()">
                 <option value="">— Choose subject —</option>
@@ -122,7 +173,7 @@
                      border-radius:var(--radius);background:var(--bg)">
             </div>
           </div>
-          <button class="btn btn-primary btn-full" onclick="addTest()">Add Entry Test</button>
+          <button class="btn btn-primary btn-full" id="add-test-btn" onclick="addTest()">Add Entry Test</button>
         </div>
 
         <!-- All programs table -->
@@ -149,44 +200,22 @@
   </div>
 </div>
 
-<!-- Edit subjects modal -->
-<div id="edit-test-subjects-modal"
-  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);
-         align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px)">
-  <div style="background:var(--white);border-radius:var(--radius-xl);padding:1.75rem;
-              width:100%;max-width:420px;box-shadow:var(--shadow-lg);border:1px solid var(--border)">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-      <h3 id="edit-test-modal-title" style="font-size:1rem;font-weight:600"></h3>
-      <button onclick="closeEditTestSubjects()"
-        style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light)">&#215;</button>
-    </div>
-    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
-      <input type="text" class="form-control" id="edit-test-subject-inp"
-        placeholder="Add subject..."  style="flex:1"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();addSubjectToEditTest();}">
-      <button class="btn btn-outline btn-sm" onclick="addSubjectToEditTest()">Add</button>
-    </div>
-    <div id="edit-test-subjects-list"
-      style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;
-             padding:8px;border:1px solid var(--border);
-             border-radius:var(--radius);background:var(--bg);margin-bottom:1rem">
-    </div>
-    <div style="display:flex;gap:0.65rem;justify-content:flex-end">
-      <button class="btn btn-ghost btn-sm" onclick="closeEditTestSubjects()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="saveEditTestSubjects()">Save</button>
-    </div>
-  </div>
-</div>
+<!-- The "edit subjects" modal used to be written out here as static markup,
+     including a free-text `<input id="edit-test-subject-inp">`. It was dead
+     markup in the most misleading way possible: openEditTestSubjects() in
+     app.js replaces this element's entire innerHTML with its own dropdown of
+     the same id, so editing the input here changed nothing that ever ran.
+     Anyone "fixing" the free-text box here would have seen no effect at all.
+     openEditTestSubjects() creates the overlay itself when it's absent, so the
+     modal now has exactly one definition, in app.js.
 
+     The commented-out inline <script> that used to sit below the app.js tag is
+     gone for the same reason: it re-declared window._newTestSubjects and called
+     renderTestTags() on DOMContentLoaded, both of which app.js already does.
+     Two copies of the same state is how this page's subject list got out of
+     step with what was actually submitted. -->
+
+<script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
-<!-- <script>
-  window._newTestSubjects  = [];
-  window._editTestSubjects = [];
-  window._editingTestId    = null;
-
-  document.addEventListener('DOMContentLoaded', () => {
-    renderTestTags();
-  });
-</script> -->
 </body>
 </html>

@@ -137,22 +137,18 @@
   </div>
 </div>
 
+<script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
-<script>
-  // Populate course dropdown with teacher's actual courses
-  document.addEventListener('DOMContentLoaded', () => {
-    const sel = document.getElementById('acm-course');
-    if (sel) {
-      getTeacherCourseIds().forEach(cid => {
-        if (COURSES[cid]) {
-          const opt = document.createElement('option');
-          opt.value = COURSES[cid].title;
-          opt.textContent = COURSES[cid].title;
-          sel.appendChild(opt);
-        }
-      });
-    }
-  });
-</script>
+<!-- The inline <script> that used to follow these tags populated the #acm-course
+     dropdown from its own DOMContentLoaded handler. It lost that race every
+     time: app.js registers its handler first, and that handler awaits
+     loadAppData(), so it yields — and this one then ran while COURSES was still
+     an empty object. The dropdown was permanently empty, which meant no class
+     could be scheduled at all. It also set each option's value to the course
+     TITLE rather than its id, which is what pushed submitAddClass() into
+     guessing the subject from that title.
+
+     Populating it now happens in populateClassCourseSelect(), called when the
+     modal opens — after the data has definitely loaded. -->
 </body>
 </html>

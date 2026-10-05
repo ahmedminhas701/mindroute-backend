@@ -71,7 +71,22 @@
 
 'use strict';
 
-const API_BASE = 'http://localhost:3000/api'; // swap for your deployed URL later
+// ── Where the API lives ──────────────────────────────────────────────────
+//
+// This was a hard-coded 'http://localhost:3000/api'. That worked only as long
+// as two unrelated things stayed in step: this line, and PORT in .env. server.js
+// reads `process.env.PORT || 5000`, so deleting the PORT line from .env moves
+// the server to 5000 while every page keeps asking for 3000 — and the only
+// symptom is that all data silently fails to load, on every page, with nothing
+// but a network error in the console to explain it.
+//
+// Express now serves public/ itself (see server.js), so when a page is opened
+// from the server the API is on the same origin and can be addressed relatively.
+// The literal is kept as a fallback for opening the HTML straight off disk with
+// file://, where location.origin is 'null' and a relative URL can't resolve.
+const API_BASE = (location.protocol === 'http:' || location.protocol === 'https:')
+  ? location.origin + '/api'
+  : 'http://localhost:3000/api';
 
 // ── Session (from earlier chunk) ──
 function saveSession(token, user) {
@@ -173,6 +188,308 @@ function getActiveStudent() { return CURRENT_STUDENT; }
 function getActiveTeacher() { return CURRENT_TEACHER; }
 
 
+// ══════════════════════════════════════════════════════════════════════════
+//  SHARED UI HELPERS
+//
+//  Everything below is used by more than one page. They live here, above the
+//  page renderers, so there is exactly one implementation of each — the bug
+//  class this project kept hitting was two copies of the same function (one
+//  in app.js, one in an inline <script>) drifting apart until the page ran
+//  the wrong one.
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── HTML escaping ────────────────────────────────────────────────────────
+//
+// Almost every list in this app is built with `innerHTML +=` and template
+// literals. That means any value that came from a form — a student's name, a
+// course title, a subject — is parsed as HTML. A name like
+//   Ali <img src=x onerror=alert(1)>
+// executes. Even without malice it breaks the page: a name containing & or <
+// silently mangles the row.
+//
+// `esc()` is the short name so there's no excuse not to use it at every
+// interpolation point. It delegates to the shared validator so the browser and
+// the server escape identically.
+function esc(v) {
+  if (v === null || v === undefined) return '';
+  if (window.MRValidate && window.MRValidate.escapeHtml) return window.MRValidate.escapeHtml(v);
+  return String(v).replace(/[&<>"'`=/]/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+    "'": '&#39;', '`': '&#96;', '=': '&#61;', '/': '&#47;',
+  }[c]));
+}
+
+/** Escaping for a value going inside a single-quoted onclick="..." attribute. */
+function escAttr(v) {
+  if (window.MRValidate && window.MRValidate.escapeJsAttr) return window.MRValidate.escapeJsAttr(v);
+  return String(v === null || v === undefined ? '' : v).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// ── Teacher reference resolution ─────────────────────────────────────────
+//
+// `Course.teacher` used to store a teacher's display NAME. The server now
+// stores the teacher's ID ('T001') instead, because a name is not a stable
+// key: renaming a teacher used to orphan every course they taught, and two
+// teachers with the same name were indistinguishable.
+//
+// The display layer therefore can't print `c.teacher` raw any more. This
+// resolves either form — an id, or a legacy name — to the current display
+// name, so a database that still holds old name-based values keeps rendering
+// correctly instead of showing 'T001' to students.
+function teacherLabel(ref) {
+  if (!ref) return 'Unassigned';
+  const byId = TEACHERS_DB.find(t => t.id === ref);
+  if (byId) return byId.name;
+  const byName = TEACHERS_DB.find(t => t.name === ref);
+  if (byName) return byName.name;
+  // Not in the directory: either a deleted teacher or a free-text legacy
+  // value. Show the raw value rather than 'undefined' — an admin seeing
+  // 'T007' in the teacher column is a usable clue; 'undefined' is not.
+  return String(ref);
+}
+
+/** The Teacher record behind a Course.teacher value, or null. */
+function teacherFromRef(ref) {
+  if (!ref) return null;
+  return TEACHERS_DB.find(t => t.id === ref) || TEACHERS_DB.find(t => t.name === ref) || null;
+}
+
+// ── <select> population ──────────────────────────────────────────────────
+//
+// CRITICAL TIMING NOTE: every dropdown in this app must be filled when the
+// MODAL OPENS, never at page-parse time. The option lists come from
+// SUBJECTS_DB / TEACHERS_DB / ENTRY_TESTS, which are empty until the async
+// loadAppData() resolves. Code that populated a <select> during
+// DOMContentLoaded produced a permanently empty dropdown, which is exactly
+// why free-text subject inputs survived in this codebase — people needed a
+// way around a dropdown that never had anything in it.
+/**
+ * @param {string} elId          id of the <select>
+ * @param {Array}  items         strings, or objects
+ * @param {object} opts
+ *   value/label — key names when items are objects (default 'value'/'label')
+ *   selected    — value to preselect
+ *   placeholder — text for a leading empty option; pass null for none
+ *   emptyText   — what to show when items is empty
+ */
+function populateSelect(elId, items, opts = {}) {
+  const el = typeof elId === 'string' ? document.getElementById(elId) : elId;
+  if (!el) return null;
+  const {
+    value = 'value', label = 'label', selected = '',
+    placeholder = '— Select —', emptyText = null,
+  } = opts;
+
+  const list = Array.isArray(items) ? items : [];
+  let html = '';
+  if (!list.length && emptyText) {
+    html = `<option value="">${esc(emptyText)}</option>`;
+    el.innerHTML = html;
+    el.value = '';
+    return el;
+  }
+  if (placeholder !== null) html += `<option value="">${esc(placeholder)}</option>`;
+  list.forEach(item => {
+    const v = (item && typeof item === 'object') ? item[value] : item;
+    const l = (item && typeof item === 'object') ? item[label] : item;
+    html += `<option value="${esc(v)}">${esc(l)}</option>`;
+  });
+  el.innerHTML = html;
+  // Assign after the options exist — setting .value first is a no-op because
+  // a <select> silently rejects a value with no matching <option>.
+  el.value = selected == null ? '' : String(selected);
+  return el;
+}
+
+/**
+ * The canonical subject names, sorted, as plain strings.
+ *
+ * SUBJECTS_DB holds raw Subject documents ({ _id, name, isCore }), but older
+ * code paths sometimes handed it an array of bare strings. Rather than have
+ * every caller re-derive the name defensively — which it was doing in three
+ * separate places, and getting subtly different results — there is one reader.
+ */
+function subjectNames() {
+  return (SUBJECTS_DB || [])
+    .map(s => (typeof s === 'string' ? s : s && s.name))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** Subject dropdown, fed from the canonical Subject collection. */
+function populateSubjectSelect(elId, selected = '', opts = {}) {
+  return populateSelect(elId, subjectNames(), {
+    selected,
+    placeholder: opts.placeholder !== undefined ? opts.placeholder : '— Select subject —',
+    emptyText: 'No subjects yet — add one on the Entry Tests page',
+    ...opts,
+  });
+}
+
+/**
+ * Teacher dropdown. Option VALUES are teacher ids, because that is what the
+ * server stores. `subject` narrows the list to teachers who actually teach it —
+ * assigning a Chemistry teacher to a Biology course is rejected by the API, so
+ * the form shouldn't offer it.
+ */
+function populateTeacherSelect(elId, selected = '', subject = '') {
+  let list = (TEACHERS_DB || []).filter(t => t.status !== 'inactive');
+  if (subject) {
+    const matching = list.filter(t => Array.isArray(t.subjects) && t.subjects.includes(subject));
+    // Keep a currently-assigned teacher visible even if they no longer teach
+    // the subject, so editing an old course doesn't silently blank the field.
+    if (selected && !matching.some(t => t.id === selected)) {
+      const cur = teacherFromRef(selected);
+      if (cur) matching.push(cur);
+    }
+    list = matching;
+  }
+  const items = list.map(t => ({
+    value: t.id,
+    label: t.subjects && t.subjects.length ? `${t.name} — ${t.subjects.join(', ')}` : t.name,
+  }));
+  return populateSelect(elId, items, {
+    selected: teacherFromRef(selected) ? teacherFromRef(selected).id : '',
+    placeholder: '— Unassigned —',
+    emptyText: subject ? `No active teacher teaches ${subject}` : 'No teachers yet',
+  });
+}
+
+/** Checkbox list of subjects (multi-select) into a container div. */
+function renderSubjectCheckboxes(containerId, selected = [], cssClass = 'subject-cb') {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const names = subjectNames();
+  const chosen = new Set((selected || []).map(String));
+  if (!names.length) {
+    box.innerHTML = '<div style="font-size:0.76rem;color:var(--text-light)">No subjects exist yet. Add them on the Entry Tests page first.</div>';
+    return;
+  }
+  box.innerHTML = names.map(n => `
+    <label style="display:inline-flex;align-items:center;gap:0.35rem;font-size:0.8rem;font-weight:500;
+                  padding:0.3rem 0.55rem;border:1px solid var(--border);border-radius:var(--radius);
+                  cursor:pointer;background:var(--white);margin:0 0.35rem 0.35rem 0">
+      <input type="checkbox" class="${esc(cssClass)}" value="${esc(n)}" ${chosen.has(n) ? 'checked' : ''}>
+      ${esc(n)}
+    </label>`).join('');
+}
+
+/** Read back a checkbox list rendered by renderSubjectCheckboxes(). */
+function readSubjectCheckboxes(cssClass = 'subject-cb') {
+  return [...document.querySelectorAll('.' + cssClass + ':checked')].map(cb => cb.value);
+}
+
+// ── Inline field errors ──────────────────────────────────────────────────
+//
+// A single toast saying "Invalid input" makes the user hunt for the offending
+// field. These put the message directly under the input that caused it, which
+// is the only feedback that actually tells someone what to change.
+//
+// The server returns { message, errors: { fieldName: 'why' } } and the field
+// names match the input ids by convention (prefix + '-' + field), so one call
+// can paint every error at once.
+
+/** Clear all error styling/messages inside a modal or form. */
+function clearFieldErrors(rootId) {
+  const root = rootId ? document.getElementById(rootId) : document;
+  if (!root) return;
+  root.querySelectorAll('.field-error').forEach(el => el.remove());
+  root.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+}
+
+/** Put one message under one input. */
+function setFieldError(inputId, message) {
+  const input = document.getElementById(inputId);
+  if (!input) return false;
+  input.classList.add('is-invalid');
+  // Remove a previous message for this field so repeated submits don't stack.
+  const holder = input.parentElement;
+  if (!holder) return true;
+  holder.querySelectorAll('.field-error').forEach(el => el.remove());
+  const div = document.createElement('div');
+  div.className = 'field-error';
+  div.textContent = message;
+  holder.appendChild(div);
+  return true;
+}
+
+/**
+ * Paint a whole { field: message } map.
+ * @param prefix  input-id prefix, e.g. 'asm' for asm-name
+ * @returns the messages that had no matching input, so the caller can still
+ *          surface them in a toast instead of swallowing them.
+ */
+function applyFieldErrors(errors, prefix, rootId) {
+  clearFieldErrors(rootId);
+  const orphaned = [];
+  Object.entries(errors || {}).forEach(([field, msg]) => {
+    const id = prefix ? `${prefix}-${field}` : field;
+    if (!setFieldError(id, msg)) orphaned.push(msg);
+  });
+  // Scroll the first bad field into view — in a long modal the error can
+  // otherwise be below the fold and look like nothing happened.
+  const firstBad = (rootId ? document.getElementById(rootId) : document)?.querySelector('.is-invalid');
+  if (firstBad && firstBad.scrollIntoView) firstBad.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  return orphaned;
+}
+
+/**
+ * Validate a form client-side with the SAME rules the server uses, then paint
+ * the failures inline. Returns the cleaned values, or null if anything failed.
+ *
+ * Client-side validation here is purely for fast, specific feedback — the
+ * server re-validates everything with this identical rule set, so a caller
+ * bypassing the form gains nothing.
+ */
+function validateForm(rules, readers, prefix, rootId) {
+  clearFieldErrors(rootId);
+  if (!window.MRValidate) return readers;   // validation.js missing: let the server decide
+  const { ok, values, errors } = window.MRValidate.validate(readers, rules);
+  if (ok) return values;
+  const orphaned = applyFieldErrors(errors, prefix, rootId);
+  showToast(orphaned.length ? orphaned[0] : window.MRValidate.firstError(errors));
+  return null;
+}
+
+/** Read a field's raw string value by id ('' when the element is absent). */
+function fv(id) {
+  const el = document.getElementById(id);
+  return el ? el.value : '';
+}
+
+/**
+ * Turn an API error into inline field errors where possible.
+ * apiFetch throws a plain Error with only `.message`, so the structured
+ * `errors` object the routes return was being thrown away. apiFetchDetailed
+ * below keeps it.
+ */
+async function apiFetchDetailed(path, options = {}) {
+  const isFormData = options.body instanceof FormData;
+  const res = await fetch(API_BASE + path, {
+    ...options,
+    headers: {
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  if (res.status === 401) {
+    clearSession();
+    window.location.href = loginPagePath();
+    throw new Error('Session expired.');
+  }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(body.message || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.fieldErrors = body.errors || null;
+    err.payload = body;
+    throw err;
+  }
+  return body;
+}
+
+
 
 
 
@@ -255,7 +572,9 @@ function requireLogin() {
  * somewhere real instead of showing them a page that isn't theirs.
  */
 function roleHomePath(role) {
-  const homes = { student: 'Student/dashboard.html', teacher: 'Teacher/dashboard.html', admin: 'Admin/index.html' };
+  // Admin goes to the real multi-page dashboard.html, NOT Admin/index.html —
+  // index.html is the retired hash-routing SPA shell (it now just redirects here).
+  const homes = { student: 'Student/dashboard.html', teacher: 'Teacher/dashboard.html', admin: 'Admin/dashboard.html' };
   const inSubfolder = location.pathname.includes('/Student/') ||
                        location.pathname.includes('/Teacher/') ||
                        location.pathname.includes('/Admin/');
@@ -537,23 +856,52 @@ function calcGradeFromThreshold(pct) {
   return 'F';
 }
 
+/**
+ * Reads the threshold strip, sends it, and reports how many students were
+ * regraded.
+ *
+ * The read used to be `parseInt(inp.value) || 0`, which turns a blank or
+ * non-numeric box into 0 and then writes that 0 into GRADE_THRESHOLDS *before*
+ * the request is even sent. If the request then failed, the in-memory array was
+ * already corrupted and the strip re-rendered showing 0 for that grade. The
+ * values are now collected into a separate array and only committed once the
+ * server has accepted them.
+ */
 async function applyThresholds() {
-  document.querySelectorAll('#threshold-editor input[type=number]').forEach(inp => {
-    const idx = parseInt(inp.dataset.idx);
-    GRADE_THRESHOLDS[idx].min = parseInt(inp.value) || 0;
-  });
+  const inputs = [...document.querySelectorAll('#threshold-editor input[type=number]')];
+  const proposed = GRADE_THRESHOLDS.map(t => ({ ...t }));
+
+  for (const inp of inputs) {
+    const idx = parseInt(inp.dataset.idx, 10);
+    const row = proposed[idx];
+    if (!row) continue;
+    const raw = inp.value.trim();
+    if (raw === '' || !/^\d+$/.test(raw)) {
+      showToast(`Enter a whole number between 0 and 100 for grade ${row.grade}.`);
+      inp.focus();
+      return;
+    }
+    const n = parseInt(raw, 10);
+    if (n < 0 || n > 100) {
+      showToast(`Grade ${row.grade} must be between 0 and 100.`);
+      inp.focus();
+      return;
+    }
+    row.min = n;
+  }
 
   try {
     const result = await apiFetch('/thresholds', {
       method: 'PUT',
-      body: JSON.stringify({ thresholds: GRADE_THRESHOLDS }),
+      body: JSON.stringify({ thresholds: proposed }),
     });
-    GRADE_THRESHOLDS = result.thresholds;
-    STUDENTS_DB = await apiFetch('/students'); // refresh recomputed grades
+    GRADE_THRESHOLDS = result.thresholds;          // only now, after it stuck
+    STUDENTS_DB = await apiFetch('/students');     // refresh recomputed grades
     renderGrading();
-    showToast(`Thresholds updated — ${result.recomputedStudents} students recomputed.`);
+    showToast(`Thresholds updated — ${result.recomputedStudents} student(s) recomputed.`);
   } catch (err) {
     showToast(err.message);
+    renderGrading();                               // put the accepted values back on screen
   }
 }
 
@@ -615,11 +963,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.getElementById('admin-teachers-tbody'))  renderAdminTeachers();
   if (document.getElementById('admin-batches-grid'))    renderAdminBatches();
   if (document.getElementById('tests-tbody'))           renderTestTags();
+  if (document.getElementById('admin-subjects-tbody'))  renderAdminSubjects();
   if (document.getElementById('admin-courses-grid'))    renderAdminCourses();
   if (document.getElementById('admin-overview'))        renderAdminDashboard();
 
-  if (document.getElementById('page-content'))          initAdminSPA();
-  if (document.getElementById('login-form'))            setupLogin();
+  // NOTE: there is no `if (document.getElementById('login-form')) setupLogin();`
+  // line here any more. That id exists in no HTML file in this project, so the
+  // call never fired. login.html owns its own doLogin().
 });
 // ══════════════════════════════════════════════════
 //   17. STUDENT PAGES
@@ -757,28 +1107,63 @@ function renderDayClasses(containerId, dayName, label) {
 function renderCoursesList() {
   const student = getActiveStudent();
   const container = document.getElementById('courses-container');
-  student.enrolledCourseIds.forEach(id => {
-    const c = COURSES[id]; const pct = courseProgress(id);
+  if (!container || !student) return;
+  container.innerHTML = '';
+
+  // .filter(Boolean) matters: enrolledCourseIds can still hold the id of a
+  // course an admin has since deleted, and reading .colorLight off undefined
+  // would throw and blank the whole page.
+  const myCourses = (student.enrolledCourseIds || [])
+    .map(id => COURSES[id])
+    .filter(Boolean);
+
+  if (!myCourses.length) {
+    container.innerHTML = `
+      <div style="grid-column:1/-1;text-align:center;padding:2.5rem 1.5rem;background:var(--white);
+                  border:1px dashed var(--border);border-radius:var(--radius-xl)">
+        <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:0.5rem">
+          You're not enrolled in any courses yet
+        </div>
+        <p style="font-size:0.82rem;color:var(--text-mid);max-width:420px;margin:0 auto;line-height:1.6">
+          Courses appear here once your academy assigns you to a batch.
+          If you think this is a mistake, contact your administrator.
+        </p>
+      </div>`;
+    return;
+  }
+
+  myCourses.forEach(c => {
+    const id = c.id;
+    const pct = courseProgress(id);
     const done = allTopics(id).filter(t => isTopicDone(t.id)).length;
     const total = allTopics(id).length;
     container.innerHTML += `
       <div class="course-card">
         <div class="cc-header">
           <div class="cc-icon-row">
-            <div class="cc-icon" style="background:${c.colorLight};color:${c.color};font-family:var(--font-mono);font-weight:700">${c.icon}</div>
-            <span class="badge" style="background:${c.colorLight};color:${c.color}">${c.subject}</span>
+            <div class="cc-icon" style="background:${escAttr(c.colorLight)};color:${escAttr(c.color)};font-family:var(--font-mono);font-weight:700">${esc(c.icon)}</div>
+            <span class="badge" style="background:${escAttr(c.colorLight)};color:${escAttr(c.color)}">${esc(c.subject)}</span>
           </div>
-          <h3 style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:0.25rem">${c.title}</h3>
-          <p style="font-size:0.8rem;color:var(--text-mid)">${c.description}</p>
+          <h3 style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:0.25rem">${esc(c.title)}</h3>
+          <p style="font-size:0.8rem;color:var(--text-mid)">${esc(c.description)}</p>
         </div>
         <div class="cc-body">
-          <div class="cc-meta"><span>${c.weeks.length} weeks</span><span>${total} topics</span><span>${done} done</span><span>${c.teacher}</span></div>
-          <div class="progress-track" style="margin-bottom:4px"><div class="progress-fill" style="width:${pct}%;background:${c.color}"></div></div>
+          <div class="cc-meta"><span>${c.weeks.length} weeks</span><span>${total} topics</span><span>${done} done</span><span>${esc(teacherLabel(c.teacher))}</span></div>
+          <div class="progress-track" style="margin-bottom:4px"><div class="progress-fill" style="width:${pct}%;background:${escAttr(c.color)}"></div></div>
           <small style="color:var(--text-light);font-size:0.72rem;font-family:var(--font-mono)">${pct}% complete</small>
         </div>
         <div class="cc-footer">
-          <a href="course-detail.html?id=${c.id}" class="btn btn-primary btn-full btn-sm">Open Course</a>
-          <button class="btn btn-ghost btn-sm" onclick="openMessage('${c.teacher}','${c.title}')">Message</button>
+          ${total
+            ? `<a href="course-detail.html?id=${c.id}" class="btn btn-primary btn-full btn-sm">Open Course</a>`
+            : `<button class="btn btn-outline btn-full btn-sm" disabled title="Your teacher hasn't published any topics yet">No content yet</button>`}
+          <!-- Passes the course ID, not the title. This was
+               openMessage('${'$'}{c.teacher}','${'$'}{c.title}') — two raw strings
+               interpolated into a single-quoted onclick, so a course called
+               "Newton's Laws" produced a JavaScript syntax error in the
+               attribute and the Message button did nothing at all, with no
+               error visible anywhere except the console. It also printed the
+               teacher ID ('T001') as the teacher's name. -->
+          <button class="btn btn-ghost btn-sm" onclick="openMessageForCourse(${Number(c.id)})">Message</button>
         </div>
       </div>`;
   });
@@ -789,11 +1174,20 @@ function renderCourseDetail() {
   const params = new URLSearchParams(location.search);
   const cid = parseInt(params.get('id')) || 1;
   const course = COURSES[cid];
-  if (!course) return;
+  // `return` on its own left the page showing the empty skeleton with no
+  // explanation, which is indistinguishable from a page that failed to load.
+  // A student hitting a course they aren't enrolled in (or a stale bookmark for
+  // a deleted course) needs to be told which of the two it is.
+  if (!course) {
+    setText('cd-title', 'Course not available');
+    setText('cd-desc', "This course either no longer exists or you're not enrolled in it. Go back to My Courses and pick one from there.");
+    setText('cd-teacher', '—');
+    return;
+  }
 
   setText('cd-title', course.title);
   setText('cd-desc', course.description);
-  setText('cd-teacher', course.teacher);
+  setText('cd-teacher', teacherLabel(course.teacher));
 
   const pct = courseProgress(cid);
   const pBar = document.getElementById('cd-prog-bar');
@@ -869,7 +1263,7 @@ function renderCourseDetail() {
   }
 
   const msgBtn = document.getElementById('msg-teacher-btn');
-  if (msgBtn) msgBtn.onclick = () => openMessage(course.teacher, course.title);
+  if (msgBtn) msgBtn.onclick = () => openMessageForCourse(course.id);
 }
 
 function toggleWeek(h) { h.closest('.week-block').classList.toggle('collapsed'); }
@@ -930,6 +1324,23 @@ function loadContent(topic, course) {
     panelsEl.appendChild(panel);
   });
 }
+function toEmbeddableVideoUrl(raw) {
+  if (!raw) return null;
+  const url = String(raw).trim();
+
+  const youtube = url.match(/(?:youtube\.com\/watch\?v=|youtube\.com\/shorts\/|youtu\.be\/)([\w-]{11})/);
+  if (youtube) return { kind: 'iframe', src: `https://www.youtube.com/embed/${youtube[1]}` };
+
+  if (/^https?:\/\/player\.vimeo\.com\/video\//.test(url)) return { kind: 'iframe', src: url };
+
+  // Google Drive: 'https://drive.google.com/file/d/<ID>/view?...' -> '.../preview'
+  const drive = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+  if (drive) return { kind: 'iframe', src: `https://drive.google.com/file/d/${drive[1]}/preview` };
+
+  if (/^\/uploads\/videos\//.test(url)) return { kind: 'file', src: url };
+
+  return null;
+}
 
 /**
  * Renders the inner HTML for one content-tab panel, based on its type:
@@ -938,12 +1349,26 @@ function loadContent(topic, course) {
 function buildPanel(c, topic) {
   const student = getActiveStudent();
 
-  if (c.type === 'video') return `
-    <div class="video-player" style="margin-bottom:0.75rem">
-      <div class="vp-play">&#9654;</div>
-      <div class="vp-text">${topic.title}</div>
-      <div style="font-size:0.68rem;margin-top:4px;opacity:0.3;font-family:var(--font-mono)">${c.duration || ''}</div>
-    </div>`;
+  if (c.type === 'video') {
+    const embedSrc = toEmbeddableVideoUrl(c.url);
+    return embedSrc
+      ? `<div style="margin-bottom:0.75rem">
+          <div style="position:relative;padding-top:56.25%;background:#000;border-radius:var(--radius)">
+            <iframe src="${escAttr(embedSrc)}" title="${escAttr(topic.title)}"
+              style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:var(--radius)"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen></iframe>
+          </div>
+          ${c.duration ? `<div style="font-size:0.68rem;margin-top:4px;color:var(--text-light);font-family:var(--font-mono)">${esc(c.duration)}</div>` : ''}
+        </div>`
+      : `<div class="video-player" style="margin-bottom:0.75rem">
+          <div class="vp-play">&#9654;</div>
+          <div class="vp-text">${esc(topic.title)}</div>
+          <p style="font-size:0.72rem;color:var(--text-light);margin-top:6px">
+            ${c.url ? `No video link has been added yet for this lecture.` : `No video link has been added yet for this lecture.`}
+          </p>
+        </div>`;
+  }
 
   if (c.type === 'notes') return `
     <div style="display:flex;align-items:center;gap:1rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem">
@@ -1077,7 +1502,7 @@ function buildPanel(c, topic) {
       <div class="quiz-q">
         <p>Q${qi + 1}. ${q.q}</p>
         ${q.options.map((opt, oi) => `
-          <div class="quiz-opt" data-qi="${qi}" data-oi="${oi}" data-ans="${q.ans}"
+          <div class="quiz-opt" data-qi="${qi}" data-oi="${oi}" data-ans="${q.correct}"
             onclick="pickOpt(this)">
             <span class="quiz-opt-label">${String.fromCharCode(65 + oi)}</span> ${opt}
           </div>`).join('')}
@@ -1117,11 +1542,12 @@ function getTeacherCourseIds() {
   BATCHES.forEach(b => {
     if (!b.subjectTeachers) return;
     Object.entries(b.subjectTeachers).forEach(([subject, tid]) => {
-      if (tid === teacher.id) {
-        Object.values(COURSES).forEach(c => {
-          if (c.subject === subject) assignedCourseIds.add(c.id);
-        });
-      }
+      if (tid !== teacher.id) return;
+      // Must be a course belonging to THIS batch specifically, not any
+      // course anywhere sharing the subject name.
+      Object.values(COURSES).forEach(c => {
+        if (c.subject === subject && c.batchId === b.id) assignedCourseIds.add(c.id);
+      });
     });
   });
   (teacher.courseIds || []).forEach(id => assignedCourseIds.add(id));
@@ -1289,24 +1715,22 @@ function renderPerformance() {
     const grade    = calcGradeFromThreshold(progress);
     const oColor   = progress >= 75 ? 'var(--success)' : progress >= 60 ? 'var(--warning)' : 'var(--danger)';
 
-    // Quiz breakdown for this course only
     const courseTopicIds = new Set(allTopics(courseId).map(t => t.id));
     const quizzes   = student.quizScores.filter(q => courseTopicIds.has(q.topicId));
     const quizTotal = quizzes.reduce((a, b) => a + b.total, 0);
     const quizGot   = quizzes.reduce((a, b) => a + b.score, 0);
     const quizPct   = quizTotal ? Math.round(quizGot / quizTotal * 100) : 0;
 
-    // Assignment breakdown for this course only
     const assigns     = student.assignments.filter(a => a.courseId === courseId && a.marks !== null);
     const assignTotal = assigns.reduce((a, b) => a + b.totalMarks, 0);
     const assignGot   = assigns.reduce((a, b) => a + b.marks, 0);
     const assignPct   = assignTotal ? Math.round(assignGot / assignTotal * 100) : 0;
 
-    // Attendance for this course's subject
     const attRow = student.attendanceDetail.find(a => a.subject === course.subject);
     const attPct = attRow ? Math.round(attRow.attended / attRow.total * 100) : 0;
 
-    const needsReview = progress < 60;
+    const hasActivity = quizzes.length > 0 || assigns.length > 0;
+    const needsReview = hasActivity && progress < 60;
 
     container.innerHTML += `
       <div class="perf-subject-card">
@@ -1394,6 +1818,16 @@ function renderPerformance() {
             Re-attempt Quizzes
           </button>
         </div>` : ''}
+
+        ${!hasActivity ? `
+        <div style="margin-top:1rem;padding:0.85rem;background:var(--bg);
+                    border:1px solid var(--border);border-radius:var(--radius)">
+          <div style="font-size:0.78rem;color:var(--text-mid)">
+            You haven't started this course yet. Performance stats and the AI
+            study assistant will appear here once you complete a quiz or
+            assignment.
+          </div>
+        </div>` : ''}
       </div>`;
   });
 
@@ -1432,10 +1866,59 @@ function renderPerformance() {
   }
 }
 
+  // Top summary strip (overall score / quiz average / attendance / assignments submitted)
+  const summaryEl = document.getElementById('perf-summary');
+  if (summaryEl) {
+    const overallPct = overallProgress();
+    const totalQ   = student.quizScores.reduce((a, b) => a + b.total, 0);
+    const gotQ     = student.quizScores.reduce((a, b) => a + b.score, 0);
+    const avgQuiz  = totalQ ? Math.round(gotQ / totalQ * 100) : 0;
+    const submitted = student.assignments.filter(a => a.submitted).length;
+    const total     = student.assignments.length;
+    summaryEl.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem">
+        <div style="text-align:center">
+          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
+                      font-family:var(--font-mono)">${overallPct}%</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Overall Score</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
+                      font-family:var(--font-mono)">${avgQuiz}%</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Quiz Average</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
+                      font-family:var(--font-mono)">${student.attendance}%</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Attendance</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
+                      font-family:var(--font-mono)">${submitted}/${total}</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Assignments</div>
+        </div>
+      </div>`;
+  }
+
+
 // ══════════════════════════════════════════════════
 //   18. MESSAGING (mock student ↔ teacher chat — not persisted)
 // ══════════════════════════════════════════════════
 let msgHistory = [];
+
+/**
+ * Opens the "message my teacher" modal for a course, by ID.
+ *
+ * Callers pass the course id rather than pre-resolved display strings, so the
+ * teacher's name is looked up here (through teacherLabel, since Course.teacher
+ * holds an ID) and no user-controlled text has to survive a trip through an
+ * HTML attribute.
+ */
+function openMessageForCourse(courseId) {
+  const c = COURSES[courseId];
+  if (!c) { showToast('That course is no longer available.'); return; }
+  openMessage(teacherLabel(c.teacher), c.title);
+}
 
 function openMessage(teacher, course) {
   const modal = document.getElementById('msg-modal');
@@ -1451,7 +1934,10 @@ function closeMessage() { const modal = document.getElementById('msg-modal'); if
 function renderMessages() {
   const hist = document.getElementById('msg-history');
   if (!hist) return;
-  hist.innerHTML = msgHistory.map(m => `<div class="msg-bubble ${m.from}">${m.text}</div>`).join('');
+  // esc() matters here even though the history is local-only: the student types
+  // these messages themselves, and unescaped innerHTML meant typing "<b>hi" in
+  // your own chat box rewrote the page layout.
+  hist.innerHTML = msgHistory.map(m => `<div class="msg-bubble ${escAttr(m.from)}">${esc(m.text)}</div>`).join('');
   hist.scrollTop = hist.scrollHeight;
 }
 
@@ -1628,23 +2114,27 @@ function renderTeacherCourses() {
     return;
   }
 
-  myCourses.forEach(c => {
+  // Built as an array and assigned once. This used to be `grid.innerHTML += ...`
+  // inside the loop, which re-parses and rebuilds the entire grid on every
+  // iteration — and silently discards any event listener attached to a card
+  // rendered on an earlier pass.
+  const cards = myCourses.map(c => {
     const enrolled    = STUDENTS_DB.filter(s => s.enrolledCourseIds.includes(c.id)).length;
     const topicCount  = allTopics(c.id).length;
     const pendingG    = STUDENTS_DB.flatMap(s =>
       s.assignments.filter(a => a.courseId === c.id && a.submitted && !a.approved)
     ).length;
 
-    grid.innerHTML += `
+    return `
       <div class="card" style="display:flex;flex-direction:column;gap:0">
         <div style="display:flex;align-items:center;gap:0.85rem;margin-bottom:1rem">
           <div style="width:40px;height:40px;border-radius:var(--radius);
-                      background:${c.colorLight};color:${c.color};
+                      background:${escAttr(c.colorLight)};color:${escAttr(c.color)};
                       display:flex;align-items:center;justify-content:center;
-                      font-family:var(--font-mono);font-weight:700;flex-shrink:0">${c.icon}</div>
+                      font-family:var(--font-mono);font-weight:700;flex-shrink:0">${esc(c.icon)}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark)">${c.title}</div>
-            <div style="font-size:0.72rem;color:var(--text-light)">${c.subject} · ${c.teacher}</div>
+            <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark)">${esc(c.title)}</div>
+            <div style="font-size:0.72rem;color:var(--text-light)">${esc(c.subject)} · ${esc((BATCHES.find(b => b.id === c.batchId) || {}).name || 'Unknown batch')} · ${esc(teacherLabel(c.teacher))}</div>
           </div>
           <span class="badge badge-blue">${enrolled} students</span>
         </div>
@@ -1667,15 +2157,16 @@ function renderTeacherCourses() {
             <div style="font-size:0.65rem;color:var(--text-light);text-transform:uppercase">Pending</div>
           </div>
         </div>
-        <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:1rem;line-height:1.5">${c.description}</p>
+        <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:1rem;line-height:1.5">${esc(c.description)}</p>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto">
-          <button class="btn btn-primary btn-sm" onclick="openCourseEditor(${c.id})">Edit Curriculum</button>
+          <button class="btn btn-primary btn-sm" onclick="openCourseEditor(${Number(c.id)})">Edit Curriculum</button>
           <a href="students.html" class="btn btn-ghost btn-sm">View Students</a>
           ${pendingG > 0 ? `<a href="grading.html" class="btn btn-outline btn-sm"
             style="color:var(--warning);border-color:var(--warning)">${pendingG} to approve</a>` : ''}
         </div>
       </div>`;
   });
+  grid.innerHTML = cards.join('');
 }
 
 let _editorCourseId = null;
@@ -1683,7 +2174,13 @@ let _editorCourseId = null;
 function openCourseEditor(cid) {
   _editorCourseId = cid;
   const course = COURSES[cid];
-  setText('editor-course-label', course.subject + ' · ' + course.teacher);
+  // Guarding this at all is new. Every line below dereferences `course`, so a
+  // stale card (a course deleted by an admin while the teacher's tab was open)
+  // threw "Cannot read properties of undefined" and the editor never opened,
+  // with nothing on screen to say why.
+  if (!course) { showToast('That course no longer exists — reload the page.'); return; }
+  const batchName = (BATCHES.find(b => b.id === course.batchId) || {}).name || 'Unknown batch';
+  setText('editor-course-label', `${batchName} · ${course.subject} · ${teacherLabel(course.teacher)}`);
   setText('editor-course-title', course.title);
   renderEditorBody(cid);
   const modal = document.getElementById('course-editor-modal');
@@ -1865,35 +2362,46 @@ function buildMaterialEditor(topic, cid, wi, ti) {
   }).join('');
 }
 
-function addContentToTopic(cid, wi, ti, type) {
-  const defaults = {
-    video:  { type: 'video',  label: 'Recorded Lecture', url: '', duration: '' },
-    notes:  { type: 'notes',  label: 'Written Notes',    url: '' },
-    quiz:   { type: 'quiz',   label: 'Quiz',             questions: [] },
-    assign: { type: 'assign', label: 'Assignment',       detail: '', totalMarks: 10 },
-    link:   { type: 'link',   label: 'Reference Link',   url: '' },
-  };
-  COURSES[cid].weeks[wi].topics[ti].contents.push(defaults[type]);
-  renderEditorBody(cid);
-  // Re-open the topic editor panel after the re-render collapses everything.
-  setTimeout(() => {
-    const el = document.getElementById(`topic-edit-${cid}-${wi}-${ti}`);
-    if (el) el.style.display = 'block';
-  }, 50);
+async function addContentToTopic(cid, wi, ti, type) {
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}/contents`, {
+      method: 'POST', body: JSON.stringify({ type }),
+    });
+    renderEditorBody(cid);
+    setTimeout(() => {
+      const el = document.getElementById(`topic-edit-${cid}-${wi}-${ti}`);
+      if (el) el.style.display = 'block';
+    }, 50);
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
-function removeContentFromTopic(cid, wi, ti, ci) {
-  COURSES[cid].weeks[wi].topics[ti].contents.splice(ci, 1);
-  renderEditorBody(cid);
-  setTimeout(() => {
-    const el = document.getElementById(`topic-edit-${cid}-${wi}-${ti}`);
-    if (el) el.style.display = 'block';
-  }, 50);
+async function removeContentFromTopic(cid, wi, ti, ci) {
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}/contents/${ci}`, { method: 'DELETE' });
+    renderEditorBody(cid);
+    setTimeout(() => {
+      const el = document.getElementById(`topic-edit-${cid}-${wi}-${ti}`);
+      if (el) el.style.display = 'block';
+    }, 50);
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
-function updateContentField(cid, wi, ti, ci, field, value) {
-  COURSES[cid].weeks[wi].topics[ti].contents[ci][field] = value;
+
+async function updateContentField(cid, wi, ti, ci, field, value) {
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}/contents/${ci}`, {
+      method: 'PUT', body: JSON.stringify({ field, value }),
+    });
+  } catch (err) {
+    showToast(err.message);
+    renderEditorBody(cid);
+  }
 }
+
 
 /** Opens a modal for editing a quiz content-item's questions/options/correct-answer. */
 function openQuizEditor(cid, wi, ti, ci) {
@@ -1971,12 +2479,17 @@ function removeQuizQuestion(cid, wi, ti, ci, qi) {
 }
 
 async function saveQuizEditor(cid, wi, ti, ci) {
+  const content = COURSES[cid].weeks[wi].topics[ti].contents[ci];
+  const questions = (content.questions || []).map(q => ({
+    q: q.q,
+    options: q.options,
+    correct: q.ans,
+    explanation: q.explanation || '',
+  }));
   try {
-    const updated = await apiFetch(`/courses/${cid}`, {
-      method: 'PUT',
-      body: JSON.stringify(COURSES[cid]),
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}/contents/${ci}/questions`, {
+      method: 'PUT', body: JSON.stringify({ questions }),
     });
-    COURSES[cid] = updated;
     document.getElementById('quiz-editor-modal').style.display = 'none';
     renderEditorBody(cid);
     showToast('Quiz saved.');
@@ -1985,50 +2498,93 @@ async function saveQuizEditor(cid, wi, ti, ci) {
   }
 }
 
-function updateWeekTitle(cid, wi, val)      { COURSES[cid].weeks[wi].title = val; }
-function updateTopicTitle(cid, wi, ti, val) { COURSES[cid].weeks[wi].topics[ti].title = val; }
-function updateTopicDue(cid, wi, ti, val)   { COURSES[cid].weeks[wi].topics[ti].dueDate = val; }
+
+async function updateWeekTitle(cid, wi, val) {
+  const title = (val || '').trim();
+  if (!title) { showToast('Week title cannot be empty.'); renderEditorBody(cid); return; }
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}`, {
+      method: 'PUT', body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    showToast(err.message);
+    renderEditorBody(cid); // revert the input to the last-known-good value
+  }
+}
+
+async function updateTopicTitle(cid, wi, ti, val) {
+  const title = (val || '').trim();
+  if (!title) { showToast('Topic title cannot be empty.'); renderEditorBody(cid); return; }
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}`, {
+      method: 'PUT', body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    showToast(err.message);
+    renderEditorBody(cid);
+  }
+}
+
+async function updateTopicDue(cid, wi, ti, val) {
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}`, {
+      method: 'PUT', body: JSON.stringify({ dueDate: val || null }),
+    });
+  } catch (err) {
+    showToast(err.message);
+    renderEditorBody(cid);
+  }
+}
+
 function promptAddDue(cid, wi, ti) {
   const val = prompt('Enter due date (YYYY-MM-DD):');
-  if (val) { COURSES[cid].weeks[wi].topics[ti].dueDate = val; renderEditorBody(cid); }
+  if (val) updateTopicDue(cid, wi, ti, val).then(() => renderEditorBody(cid));
 }
 
-function addWeekToEditor() {
+async function addWeekToEditor() {
   const inp = document.getElementById('new-week-title');
   if (!inp || !inp.value.trim()) { showToast('Enter a week title first.'); return; }
-  const course = COURSES[_editorCourseId];
-  course.weeks.push({ num: course.weeks.length + 1, title: inp.value.trim(), uploadedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), topics: [] });
-  inp.value = '';
-  renderEditorBody(_editorCourseId);
-  showToast('Week added.');
-}
-function deleteWeek(cid, wi) {
-  if (!confirm('Delete this week and all its topics?')) return;
-  COURSES[cid].weeks.splice(wi, 1);
-  COURSES[cid].weeks.forEach((w, i) => w.num = i + 1); // renumber remaining weeks
-  renderEditorBody(cid); showToast('Week removed.');
-}
-function deleteTopic(cid, wi, ti) {
-  if (!confirm('Remove this topic?')) return;
-  COURSES[cid].weeks[wi].topics.splice(ti, 1);
-  COURSES[cid].weeks[wi].topics.forEach((t, i) => { t.num = COURSES[cid].weeks[wi].num + '.' + (i + 1); }); // renumber
-  renderEditorBody(cid); showToast('Topic removed.');
-}
-
-
-async function saveEditorChanges() {
   try {
-    const updated = await apiFetch(`/courses/${_editorCourseId}`, {
-      method: 'PUT',
-      body: JSON.stringify(COURSES[_editorCourseId]),
+    const updated = await apiFetch(`/courses/${_editorCourseId}/weeks`, {
+      method: 'POST',
+      body: JSON.stringify({ title: inp.value.trim() }),
     });
     COURSES[_editorCourseId] = updated;
-    showToast('Curriculum saved.');
-    closeCourseEditor();
-    if (document.getElementById('teacher-courses-grid')) renderTeacherCourses();
+    inp.value = '';
+    renderEditorBody(_editorCourseId);
+    showToast('Week added.');
   } catch (err) {
     showToast(err.message);
   }
+}
+
+async function deleteWeek(cid, wi) {
+  if (!confirm('Delete this week and all its topics?')) return;
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}`, { method: 'DELETE' });
+    renderEditorBody(cid);
+    showToast('Week removed.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function deleteTopic(cid, wi, ti) {
+  if (!confirm('Remove this topic?')) return;
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics/${ti}`, { method: 'DELETE' });
+    renderEditorBody(cid);
+    showToast('Topic removed.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+
+function saveEditorChanges() {
+  closeCourseEditor();
+  if (document.getElementById('teacher-courses-grid')) renderTeacherCourses();
+  showToast('All changes are saved.');
 }
 
 function openAddTopicModal(cid, wnum) {
@@ -2039,29 +2595,31 @@ function openAddTopicModal(cid, wnum) {
   document.querySelectorAll('#content-type-checks input').forEach(cb => cb.checked = false);
   document.getElementById('add-topic-modal').style.display = 'flex';
 }
+
 function closeAddTopicModal() { document.getElementById('add-topic-modal').style.display = 'none'; }
-function submitAddTopic() {
+
+async function submitAddTopic() {
   const cid   = parseInt(document.getElementById('add-topic-cid').value);
   const wnum  = parseInt(document.getElementById('add-topic-wnum').value);
   const title = document.getElementById('new-topic-title').value.trim();
   const due   = document.getElementById('new-topic-due').value || null;
   if (!title) { showToast('Enter a topic title.'); return; }
-  const week = COURSES[cid].weeks.find(w => w.num === wnum);
-  if (!week) return;
+
+  const wi = COURSES[cid].weeks.findIndex(w => w.num === wnum);
+  if (wi === -1) return;
 
   const types = [...document.querySelectorAll('#content-type-checks input:checked')].map(cb => cb.value);
-  const ti = week.topics.length + 1;
-  const contents = types.map(type => {
-    if (type === 'video')  return { type: 'video',  label: 'Recorded Lecture', duration: '—' };
-    if (type === 'notes')  return { type: 'notes',  label: 'Written Notes' };
-    if (type === 'quiz')   return { type: 'quiz',   label: 'Quiz', questions: [] };
-    if (type === 'assign') return { type: 'assign', label: 'Assignment', detail: 'Submit as PDF.' };
-    if (type === 'link')   return { type: 'link',   label: 'Reference Link', url: '#' };
-    return null;
-  }).filter(Boolean);
-
-  week.topics.push({ id: 't' + Date.now(), num: wnum + '.' + ti, title, dueDate: due, contents });
-  closeAddTopicModal(); renderEditorBody(cid); showToast('Topic added.');
+  try {
+    COURSES[cid] = await apiFetch(`/courses/${cid}/weeks/${wi}/topics`, {
+      method: 'POST',
+      body: JSON.stringify({ title, dueDate: due, contentTypes: types }),
+    });
+    closeAddTopicModal();
+    renderEditorBody(cid);
+    showToast('Topic added.');
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 let _currentStudentCourse = 'all';
@@ -2229,9 +2787,28 @@ function openStudentDetail(sid) {
 }
 function closeStudentDetail() { document.getElementById('student-detail-modal').style.display = 'none'; }
 
-/** Populates the course-filter dropdown on the Grading page (once), then renders the grading list. */
+/**
+ * Populates the course-filter dropdown on the Grading page (once), then renders
+ * the grading list.
+ *
+ * The body of this function used to be empty apart from renderGrading(), and the
+ * dropdown was filled by a second DOMContentLoaded handler inside grading.html.
+ * That handler could never work: this file registers its own DOMContentLoaded
+ * listener first and that listener is async, so it yields at `await
+ * loadAppData()` — meaning the page's handler ran while COURSES was still {}.
+ * The filter therefore only ever contained "All Courses". Doing it here, from
+ * inside the router, guarantees the data has already landed.
+ */
 function initGrading() {
-
+  const cf = document.getElementById('grade-filter-course');
+  if (cf) {
+    const opts = ['<option value="all">All Courses</option>'];
+    getTeacherCourseIds().forEach(cid => {
+      const c = COURSES[cid];
+      if (c) opts.push(`<option value="${escAttr(cid)}">${esc(c.title)}</option>`);
+    });
+    cf.innerHTML = opts.join('');
+  }
   renderGrading();
 }
 
@@ -2337,10 +2914,10 @@ function renderGrading() {
           ${isAssign ? 'A' : 'Q'}
         </div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:0.88rem">${item.title || item.topic}</div>
+          <div style="font-weight:600;font-size:0.88rem">${esc(item.title || item.topic || '—')}</div>
           <div style="font-size:0.75rem;color:var(--text-light)">
-            ${item.studentName} · ${item.course}
-            ${isAssign && item.submittedOn ? ` · Submitted ${item.submittedOn}` : ''}
+            ${esc(item.studentName)} · ${esc(item.course || '—')}
+            ${isAssign && item.submittedOn ? ` · Submitted ${esc(item.submittedOn)}` : ''}
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:0.65rem;flex-shrink:0">
@@ -2361,12 +2938,12 @@ function renderGrading() {
           ${statusBadge}
           ${isAssign && item.submitted ? `
             <button class="btn btn-outline btn-sm"
-              onclick="openGradeModal('${item.studentId}','${item.id}','assign')">
+              onclick="openGradeModal('${escAttr(item.studentId)}','${escAttr(item.id)}','assign')">
               ${approved ? 'Edit' : 'Review'}
             </button>
             ${!approved ? `
               <button class="btn btn-primary btn-sm"
-                onclick="approveGrade('${item.studentId}','${item.id}')">
+                onclick="approveGrade('${escAttr(item.studentId)}','${escAttr(item.id)}')">
                 Approve
               </button>` : ''}` : ''}
         </div>
@@ -2391,14 +2968,29 @@ function openGradeModal(studentId, itemId, type) {
   setText('gm-submitted-on', type === 'assign' ? (item.submittedOn || '—') : (item.date || '—'));
   setText('gm-course-name',  item.course || '—');
 
-  // --- NEW SUBMISSION DISPLAY CODE ---
+  // Submission preview. Every value here was typed by the STUDENT, so it goes
+  // through esc()/escAttr() — this was raw innerHTML before, which means a
+  // student could put markup (or a script tag) in their answer text or file name
+  // and have it execute in the teacher's session when the teacher opened the
+  // grade modal. That is the one XSS path in this app with a real attacker on
+  // the other end of it.
   const FILE_BASE = API_BASE.replace('/api', '');
   const subEl = document.getElementById('gm-submission-content');
   if (subEl) {
     if (type === 'assign') {
       let html = '';
-      if (item.answerText) html += `<div style="margin-bottom:6px"><strong>Answer:</strong> ${item.answerText}</div>`;
-      if (item.fileUrl) html += `<div><strong>File:</strong> <a href="${FILE_BASE}${item.fileUrl}" target="_blank">${item.fileName || 'Download attachment'}</a></div>`;
+      if (item.answerText) {
+        html += `<div style="margin-bottom:6px"><strong>Answer:</strong> ${esc(item.answerText)}</div>`;
+      }
+      if (item.fileUrl) {
+        // Only ever a server-issued /uploads/... path; anything else (a
+        // javascript: URL, an absolute link elsewhere) is refused rather than
+        // rendered as a clickable link in the teacher's page.
+        const safePath = /^\/[\w./-]*$/.test(item.fileUrl) ? item.fileUrl : '';
+        html += safePath
+          ? `<div><strong>File:</strong> <a href="${escAttr(FILE_BASE + safePath)}" target="_blank" rel="noopener noreferrer">${esc(item.fileName || 'Download attachment')}</a></div>`
+          : '<div><strong>File:</strong> <em>attachment path looks wrong — not linked</em></div>';
+      }
       subEl.innerHTML = html || '<em>No written answer or file submitted.</em>';
       subEl.style.display = 'block';
     } else {
@@ -2419,12 +3011,24 @@ function openGradeModal(studentId, itemId, type) {
     marksEl.value = item.score; totalEl.value = item.total;
     totalEl.disabled = true; gradeEl.value = ''; feedEl.value = item.feedback || '';
   }
+  // Show the auto-grade strip straight away instead of waiting for the teacher
+  // to touch the marks box. Re-opening a graded item used to show the preview
+  // hidden and blank even though marks were already filled in.
+  previewAutoGrade();
   document.getElementById('grade-modal').style.display = 'flex';
 }
 function closeGradeModal() { document.getElementById('grade-modal').style.display = 'none'; }
 
-/** Validates and saves the grade-entry modal's values back to the student's assignment/quiz record. */
-async function submitGrade() {
+/**
+ * Reads the grade modal, validates it, and returns
+ * { studentId, itemId, type, marks, total, gradeLtr, feedback, pct, grade }
+ * or null if something is wrong (a toast has already been shown).
+ *
+ * Shared by submitGrade() and submitAndApproveGrade() so the two buttons can
+ * never disagree about what counts as valid. They used to be two independent
+ * copies of the same twenty lines, living in grading.html.
+ */
+function readGradeForm() {
   const studentId = document.getElementById('gm-student-id').value;
   const itemId    = document.getElementById('gm-item-id').value;
   const type      = document.getElementById('gm-item-type').value;
@@ -2433,83 +3037,242 @@ async function submitGrade() {
   const gradeLtr  = document.getElementById('gm-grade-letter').value;
   const feedback  = document.getElementById('gm-feedback').value.trim();
 
-  if (isNaN(marks) || isNaN(total) || total <= 0) { showToast('Enter valid marks.'); return; }
-  if (marks > total) { showToast('Marks cannot exceed total.'); return; }
+  if (isNaN(marks) || isNaN(total) || total <= 0) { showToast('Enter valid marks.'); return null; }
+  if (marks < 0) { showToast('Marks cannot be negative.'); return null; }
+  if (marks > total) { showToast(`Marks (${marks}) cannot exceed the total (${total}).`); return null; }
 
   const student = STUDENTS_DB.find(s => s.id === studentId);
-  if (!student) return;
-  const pct = Math.round(marks / total * 100);
-  const computedGrade = gradeLtr || calcGradeLetter(pct);
+  if (!student) { showToast('That student is no longer in the list — reload the page.'); return null; }
 
+  const pct = Math.round(marks / total * 100);
+  return {
+    studentId, itemId, type, marks, total, gradeLtr, feedback, student, pct,
+    // The grading list shows calcGradeFromThreshold(pct), because thresholds are
+    // editable at the top of the page. Saving used to store calcGradeLetter(pct)
+    // — the hard-coded legacy scale — so after any threshold change the letter
+    // in the list and the letter actually saved were different grades.
+    grade: gradeLtr || calcGradeFromThreshold(pct),
+  };
+}
+
+/** Live "Auto Grade" preview in the grade modal as the teacher types marks. */
+function previewAutoGrade() {
+  const marks   = parseFloat(document.getElementById('gm-marks').value);
+  const total   = parseFloat(document.getElementById('gm-total').value);
+  const preview = document.getElementById('gm-auto-preview');
+  const gradeEl = document.getElementById('gm-auto-grade');
+  if (!preview || !gradeEl) return;
+
+  if (!isNaN(marks) && !isNaN(total) && total > 0 && marks >= 0 && marks <= total) {
+    const pct = Math.round(marks / total * 100);
+    gradeEl.textContent = `${calcGradeFromThreshold(pct)} (${pct}%)`;
+    preview.style.display = 'block';
+  } else {
+    preview.style.display = 'none';
+  }
+}
+
+/** Persists the marks/feedback in the grade modal. Returns true on success. */
+async function saveGradeFields(f) {
+  if (f.type === 'assign') {
+    const updated = await apiFetch(`/students/${f.studentId}/assignments/${f.itemId}/grade`, {
+      method: 'PATCH',
+      body: JSON.stringify({ marks: f.marks, totalMarks: f.total, grade: f.grade, feedback: f.feedback }),
+    });
+    const item = f.student.assignments.find(a => a.id === f.itemId);
+    if (item) Object.assign(item, updated);
+  } else {
+    const updated = await apiFetch(`/students/${f.studentId}/quiz-scores/${f.itemId}/grade`, {
+      method: 'PATCH',
+      body: JSON.stringify({ score: f.marks, feedback: f.feedback }),
+    });
+    const item = f.student.quizScores.find(q => q.id === f.itemId);
+    if (item) Object.assign(item, updated);
+  }
+  return true;
+}
+
+/** Re-renders whatever grade-aware view is on screen. */
+function refreshAfterGrade() {
+  if (document.getElementById('grading-container')) renderGrading();
+  if (document.getElementById('students-tbody'))    refreshStudentTable();
+}
+
+/** "Save Marks" — records the marks without publishing the grade to the student. */
+async function submitGrade() {
+  const f = readGradeForm();
+  if (!f) return;
   try {
-    if (type === 'assign') {
-      const updated = await apiFetch(`/students/${studentId}/assignments/${itemId}/grade`, {
+    await saveGradeFields(f);
+    closeGradeModal();
+    showToast(`Marks saved — ${f.grade}. Not published until you approve it.`);
+    refreshAfterGrade();
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+/**
+ * "Save & Approve" — saves the marks and then approves in one click.
+ *
+ * This function did not exist in app.js at all. The only copy lived in
+ * grading.html's inline <script>, mutated STUDENTS_DB in memory, and then called
+ * saveStudentsDB() and autoUpdateAttendance() — neither of which exists anywhere
+ * in the codebase. So the button threw a ReferenceError partway through: nothing
+ * was persisted, the modal stayed open, and the page never re-rendered. From the
+ * teacher's side, clicking "Save & Approve" simply did nothing.
+ *
+ * Approval is a separate PATCH because the server refuses to approve an
+ * assignment with no marks; doing the two in order means the marks are always
+ * there by the time approve runs.
+ */
+async function submitAndApproveGrade() {
+  const f = readGradeForm();
+  if (!f) return;
+  try {
+    await saveGradeFields(f);
+
+    if (f.type === 'assign') {
+      const approved = await apiFetch(`/students/${f.studentId}/assignments/${f.itemId}/approve`, {
         method: 'PATCH',
-        body: JSON.stringify({ marks, totalMarks: total, grade: computedGrade, feedback }),
       });
-      const item = student.assignments.find(a => a.id === itemId);
-      if (item) Object.assign(item, updated);
-    } else {
-      const updated = await apiFetch(`/students/${studentId}/quiz-scores/${itemId}/grade`, {
-        method: 'PATCH',
-        body: JSON.stringify({ score: marks, feedback }),
-      });
-      const item = student.quizScores.find(q => q.id === itemId);
-      if (item) Object.assign(item, updated);
+      const item = f.student.assignments.find(a => a.id === f.itemId);
+      if (item) Object.assign(item, approved);
     }
+    // Quiz attempts have no approval step — they are visible to the student as
+    // soon as they're scored, which is why there's no /approve route for them.
 
     closeGradeModal();
-    showToast('Grade published: ' + computedGrade);
-    if (document.getElementById('grading-container')) renderGrading();
-    if (document.getElementById('students-tbody')) refreshStudentTable();
+    showToast(`Grade published: ${f.grade}`);
+    refreshAfterGrade();
   } catch (err) {
     showToast(err.message);
   }
 }
 
 /** Renders the teacher's weekly schedule grid (one column per day, editable classes). */
+/**
+ * The current teacher's own classes, as { row, idx } pairs where idx is the index
+ * into TEACHER_SCHEDULE (what editClass/deleteClass expect).
+ *
+ * GET /api/schedule returns the WHOLE academy timetable — it has to, because the
+ * student dashboard reads the same endpoint. The teacher page was rendering all
+ * of it, so every teacher saw every colleague's classes and could click "edit" on
+ * them. The server now refuses that with a 403, but the row shouldn't be offered
+ * in the first place.
+ */
+function myScheduleRows() {
+  const me = getActiveTeacher();
+  return TEACHER_SCHEDULE
+    .map((row, idx) => ({ row, idx }))
+    .filter(({ row }) => {
+      if (!me) return true;                       // admin view: show everything
+      if (row.teacherId) return row.teacherId === me.id;
+      // Legacy rows have no teacherId. Fall back to "is this one of my courses",
+      // so an existing timetable doesn't vanish after this change.
+      return getTeacherCourseIds().some(cid => COURSES[cid] && COURSES[cid].title === row.course);
+    });
+}
+
 function renderTeacherSchedule() {
   const grid = document.getElementById('teacher-schedule-grid');
   if (!grid) return;
   grid.innerHTML = '';
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  const mine = myScheduleRows();
 
-
-
+  let html = '';
   days.forEach(day => {
-    const classes = TEACHER_SCHEDULE.map((r, i) => ({ ...r, _idx: i })).filter(r => r.day === day);
+    const classes = mine.filter(({ row }) => row.day === day)
+                        .sort((a, b) => String(a.row.time).localeCompare(String(b.row.time)));
     const isToday = day === today;
-    const rows = classes.length ? classes.map(r => `
-      <div class="day-class" style="cursor:pointer" onclick="editClass(${r._idx})">
-        <div class="class-time">${r.time}</div>
-        <div class="class-info" style="flex:1"><h4>${r.subject} <span class="badge ${r.type === 'online' ? 'badge-blue' : 'badge-green'}">${r.type}</span></h4><p>${r.room} · ${r.duration}min</p></div>
+    const rows = classes.length
+      ? classes.map(({ row: r, idx }) => `
+      <div class="day-class" style="cursor:pointer" onclick="editClass(${idx})">
+        <div class="class-time">${esc(r.time)}</div>
+        <div class="class-info" style="flex:1">
+          <h4>${esc(r.subject || 'Unknown subject')} <span class="badge ${r.type === 'online' ? 'badge-blue' : 'badge-green'}">${esc(r.type || '')}</span></h4>
+          <p>${esc(r.course || '')}${r.course ? ' · ' : ''}${esc(r.room || 'TBA')} · ${esc(r.duration || 0)}min</p>
+        </div>
         <span style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">edit</span>
-      </div>`).join('') : '<p style="color:var(--text-light);font-size:0.78rem;padding:0.85rem 0.9rem">No classes.</p>';
-    grid.innerHTML += `<div class="day-card"><div class="day-card-head ${isToday ? 'today' : ''}">${day}${isToday ? ' — Today' : ''}</div>${rows}</div>`;
+      </div>`).join('')
+      : '<p style="color:var(--text-light);font-size:0.78rem;padding:0.85rem 0.9rem">No classes.</p>';
+    html += `<div class="day-card"><div class="day-card-head ${isToday ? 'today' : ''}">${day}${isToday ? ' — Today' : ''}</div>${rows}</div>`;
   });
+  // Built as one string and assigned once. The old loop did `grid.innerHTML +=`
+  // per day, which re-parses the entire grid on every iteration.
+  grid.innerHTML = html;
+}
+
+/**
+ * Fills the class modal's course dropdown with the teacher's own courses.
+ *
+ * Lives here, called on modal open, because schedule.html used to do this in its
+ * own DOMContentLoaded handler. That handler always lost the race: app.js's
+ * handler runs first, hits `await loadAppData()` and yields, so the inline one
+ * executed while COURSES was still {} — the dropdown was permanently empty and
+ * no class could be scheduled at all.
+ *
+ * Option values are course IDS. They used to be course titles, which is what
+ * forced submitAddClass() into guessing the subject by matching that title back
+ * to a course — and storing the title itself as the "subject" when the match
+ * failed.
+ */
+function populateClassCourseSelect(selectedCourseId = '') {
+  const sel = document.getElementById('acm-course');
+  if (!sel) return;
+  const ids = getTeacherCourseIds().filter(cid => COURSES[cid]);
+  if (!ids.length) {
+    sel.innerHTML = '<option value="">No courses assigned to you yet</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">Select course...</option>' + ids.map(cid => {
+    const c = COURSES[cid];
+    return `<option value="${escAttr(c.id)}">${esc(c.title)} — ${esc(c.subject)}</option>`;
+  }).join('');
+  if (selectedCourseId !== '' && selectedCourseId != null) sel.value = String(selectedCourseId);
 }
 
 function openAddClassModal() {
   document.getElementById('acm-title').textContent = 'Add Class';
   document.getElementById('acm-edit-index').value  = '';
+  populateClassCourseSelect('');
+  // Every field is reset explicitly. Leaving day/type at whatever the last edit
+  // set them to is how a class quietly lands on the wrong day.
+  document.getElementById('acm-day').value  = 'Monday';
+  document.getElementById('acm-type').value = 'physical';
   document.getElementById('acm-time').value = '09:00';
   document.getElementById('acm-room').value = '';
   document.getElementById('acm-duration').value = '90';
   document.getElementById('acm-delete-btn').style.display = 'none';
+  clearFieldErrors('add-class-modal');
+  toggleRoomField();
   document.getElementById('add-class-modal').style.display = 'flex';
 }
 function closeAddClassModal() { document.getElementById('add-class-modal').style.display = 'none'; }
+
 function editClass(idx) {
   const r = TEACHER_SCHEDULE[idx];
+  if (!r) return;
   document.getElementById('acm-title').textContent = 'Edit Class';
   document.getElementById('acm-edit-index').value  = idx;
-  document.getElementById('acm-day').value         = r.day;
-  document.getElementById('acm-time').value        = r.time;
-  document.getElementById('acm-type').value        = r.type;
-  document.getElementById('acm-room').value        = r.room;
-  document.getElementById('acm-duration').value    = r.duration;
+
+  // Restoring the course is not optional. This step was missing, so opening an
+  // existing class showed whatever course was last selected (or nothing), and
+  // saving reassigned the class to it.
+  const courseId = r.courseId != null
+    ? r.courseId
+    : (Object.values(COURSES).find(c => c.title === r.course) || {}).id;
+  populateClassCourseSelect(courseId != null ? courseId : '');
+
+  document.getElementById('acm-day').value      = r.day || 'Monday';
+  document.getElementById('acm-time').value     = r.time || '09:00';
+  document.getElementById('acm-type').value     = r.type || 'physical';
+  document.getElementById('acm-room').value     = r.room || '';
+  document.getElementById('acm-duration').value = r.duration || 90;
   document.getElementById('acm-delete-btn').style.display = 'inline-flex';
+  clearFieldErrors('add-class-modal');
   toggleRoomField();
   document.getElementById('add-class-modal').style.display = 'flex';
 }
@@ -2517,41 +3280,59 @@ function toggleRoomField() {
   const type = document.getElementById('acm-type')?.value;
   const label = document.getElementById('acm-room-label');
   if (label) label.textContent = type === 'online' ? 'Meeting Link / Platform' : 'Room / Hall';
+  const input = document.getElementById('acm-room');
+  if (input) input.placeholder = type === 'online' ? 'e.g. Zoom link' : 'e.g. Hall A';
 }
 
 async function submitAddClass() {
-  const idx = document.getElementById('acm-edit-index').value;
-  const course = document.getElementById('acm-course').value;
-  const day = document.getElementById('acm-day').value;
-  const time = document.getElementById('acm-time').value;
-  const type = document.getElementById('acm-type').value;
-  const room = document.getElementById('acm-room').value.trim() || (type === 'online' ? 'Zoom' : 'Hall A');
-  const duration = parseInt(document.getElementById('acm-duration').value) || 90;
-  const c = Object.values(COURSES).find(c => c.title === course);
-  const subject = c ? c.subject : course;
-  const payload = { day, time, subject, course, type, room, duration };
+  const idx      = document.getElementById('acm-edit-index').value;
+  const courseId = document.getElementById('acm-course').value;
+  const day      = document.getElementById('acm-day').value;
+  const time     = document.getElementById('acm-time').value;
+  const type     = document.getElementById('acm-type').value;
+  const room     = document.getElementById('acm-room').value.trim();
+  const duration = document.getElementById('acm-duration').value;
+
+  clearFieldErrors('add-class-modal');
+  if (!courseId) {
+    setFieldError('acm-course', 'Pick a course — the class subject comes from it.');
+    return;
+  }
+  if (!time) { setFieldError('acm-time', 'Pick a start time.'); return; }
+
+  // `subject` is deliberately NOT sent. The server derives it from the course, so
+  // it is always a real Subject name. This used to be computed here as
+  // `c ? c.subject : course` — and that fallback wrote the COURSE TITLE into the
+  // subject field whenever the title lookup missed, producing schedule rows whose
+  // "subject" matched nothing in the Subject collection.
+  const payload = { courseId: Number(courseId), day, time, type, room, duration: Number(duration) };
+  const course  = COURSES[Number(courseId)];
 
   try {
     let shouldNotify = true;
     if (idx !== '') {
-      const existing = TEACHER_SCHEDULE[parseInt(idx)];
+      const existing = TEACHER_SCHEDULE[parseInt(idx, 10)];
       shouldNotify = existing.day !== payload.day || existing.time !== payload.time ||
         existing.type !== payload.type || existing.room !== payload.room ||
-        existing.duration !== payload.duration || existing.course !== payload.course;
-      const updated = await apiFetch(`/schedule/${existing._id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      TEACHER_SCHEDULE[parseInt(idx)] = updated;
+        existing.duration !== payload.duration || existing.courseId !== payload.courseId;
+      const updated = await apiFetchDetailed(`/schedule/${existing._id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      TEACHER_SCHEDULE[parseInt(idx, 10)] = updated;
     } else {
-      const created = await apiFetch('/schedule', { method: 'POST', body: JSON.stringify(payload) });
+      const created = await apiFetchDetailed('/schedule', { method: 'POST', body: JSON.stringify(payload) });
       TEACHER_SCHEDULE.push(created);
     }
     closeAddClassModal();
     renderTeacherSchedule();
 
-    if (shouldNotify) {
+    if (shouldNotify && course) {
       try {
         const notif = await apiFetch('/notifications', {
           method: 'POST',
-          body: JSON.stringify({ type: 'schedule', title: 'Schedule updated', body: `${subject} class on ${day} at ${time} has been updated.` }),
+          body: JSON.stringify({
+            type: 'schedule',
+            title: 'Schedule updated',
+            body: `${course.subject} class on ${day} at ${time} has been updated.`,
+          }),
         });
         NOTIFICATIONS.unshift(notif);
         renderNotifBell();
@@ -2559,19 +3340,21 @@ async function submitAddClass() {
     }
     showToast('Schedule updated.');
   } catch (err) {
-    showToast(err.message);
+    const orphans = applyFieldErrors(err.fieldErrors, 'acm', 'add-class-modal');
+    if (!err.fieldErrors || orphans.length) showToast(err.message);
   }
 }
 
 
 async function deleteClass() {
-  const idx = parseInt(document.getElementById('acm-edit-index').value);
+  const idx = parseInt(document.getElementById('acm-edit-index').value, 10);
   if (isNaN(idx)) return;
-  if (!confirm('Remove this class?')) return;
-
   const existing = TEACHER_SCHEDULE[idx];
+  if (!existing) return;
+  if (!confirm(`Remove the ${existing.subject || ''} class on ${existing.day} at ${existing.time}?`)) return;
+
   try {
-    await apiFetch(`/schedule/${existing._id}`, { method: 'DELETE' });
+    await apiFetchDetailed(`/schedule/${existing._id}`, { method: 'DELETE' });
     TEACHER_SCHEDULE.splice(idx, 1);
     closeAddClassModal();
     renderTeacherSchedule();
@@ -2585,138 +3368,282 @@ async function deleteClass() {
 //   20. ADMIN PAGES — full CRUD over students, teachers, batches, entry tests
 // ══════════════════════════════════════════════════
 
-/** Renders the admin Students table, applying the search box + batch/fee filters. */
+/** Renders the admin Students table, applying the search box + batch/fee/test filters. */
 function renderAdminStudents() {
-const batchFilterSel = document.getElementById('admin-batch-filter');
+  const V = window.MRValidate || {};
+
+  // Filter dropdowns are populated once, here, rather than in the HTML. Two
+  // reasons: BATCHES/ENTRY_TESTS aren't loaded when the page is parsed, and
+  // hard-coded fee-status options had drifted out of sync with the values
+  // actually stored ('Unpaid' in the markup vs 'Pending' in the database), so
+  // choosing that filter always returned an empty table.
+  const batchFilterSel = document.getElementById('admin-batch-filter');
   if (batchFilterSel && !batchFilterSel.dataset.populated) {
-    batchFilterSel.innerHTML = '<option value="all">All Batches</option>' + BATCHES.map(b => `<option value="${b.name}">${b.name}</option>`).join('');
+    populateSelect(batchFilterSel, BATCHES.map(b => b.name), { placeholder: null, selected: 'all' });
+    batchFilterSel.insertAdjacentHTML('afterbegin', '<option value="all">All Batches</option>');
+    batchFilterSel.value = 'all';
     batchFilterSel.dataset.populated = 'true';
   }
+  const feeFilterSel = document.getElementById('admin-fee-filter');
+  if (feeFilterSel && !feeFilterSel.dataset.populated) {
+    populateSelect(feeFilterSel, V.FEE_STATUSES || ['Paid', 'Partial', 'Pending', 'Overdue'], { placeholder: null });
+    feeFilterSel.insertAdjacentHTML('afterbegin', '<option value="all">All Statuses</option>');
+    feeFilterSel.value = 'all';
+    feeFilterSel.dataset.populated = 'true';
+  }
+  const testFilterSel = document.getElementById('admin-test-filter');
+  if (testFilterSel && !testFilterSel.dataset.populated) {
+    populateSelect(testFilterSel, ENTRY_TESTS.map(t => t.name), { placeholder: null });
+    testFilterSel.insertAdjacentHTML('afterbegin', '<option value="all">All Entry Tests</option>');
+    testFilterSel.value = 'all';
+    testFilterSel.dataset.populated = 'true';
+  }
+
   const tbody   = document.getElementById('admin-students-tbody');
   const countEl = document.getElementById('admin-student-count');
   const search  = (document.getElementById('admin-student-search')?.value || '').toLowerCase();
-  const batchF  = document.getElementById('admin-batch-filter')?.value || 'all';
-  const feeF    = document.getElementById('admin-fee-filter')?.value   || 'all';
+  const batchF  = batchFilterSel?.value || 'all';
+  const feeF    = feeFilterSel?.value   || 'all';
+  const testF   = testFilterSel?.value  || 'all';
   if (!tbody) return;
 
   let students = STUDENTS_DB;
-  if (search)          students = students.filter(s => s.name.toLowerCase().includes(search) || s.rollNo.toLowerCase().includes(search) || s.email.toLowerCase().includes(search));
+  if (search) {
+    students = students.filter(s =>
+      (s.name || '').toLowerCase().includes(search) ||
+      (s.rollNo || '').toLowerCase().includes(search) ||
+      (s.email || '').toLowerCase().includes(search) ||
+      (s.phone || '').includes(search) ||
+      (s.guardianName || '').toLowerCase().includes(search));
+  }
   if (batchF !== 'all') students = students.filter(s => s.batch === batchF);
   if (feeF   !== 'all') students = students.filter(s => s.feeStatus === feeF);
+  if (testF  !== 'all') students = students.filter(s => s.entryTest === testF);
 
   if (countEl) countEl.textContent = students.length + ' student' + (students.length !== 1 ? 's' : '');
-  tbody.innerHTML = '';
-  if (!students.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No students found.</td></tr>'; return; }
+  if (!students.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No students found.</td></tr>';
+    return;
+  }
 
-  students.forEach(s => {
-    const attColor = s.attendance >= 85 ? 'var(--success)' : s.attendance >= 75 ? 'var(--warning)' : 'var(--danger)';
-    tbody.innerHTML += `<tr>
-      <td><div style="font-weight:600">${s.name}</div><div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${s.email}</div></td>
-      <td style="font-family:var(--font-mono);font-size:0.76rem">${s.rollNo}</td>
-      <td>${s.batch}</td>
-      <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${s.entryTest}</span></td>
-      <td><span style="font-family:var(--font-mono);font-weight:600;color:${attColor}">${s.attendance}%</span></td>
-      <td><span class="badge ${s.feeStatus === 'Paid' ? 'badge-green' : s.feeStatus === 'Partially Paid' ? 'badge-orange' : 'badge-red'}">${s.feeStatus}</span></td>
+  tbody.innerHTML = students.map(s => {
+    const att = Number(s.attendance) || 0;
+    const attColor = att >= 85 ? 'var(--success)' : att >= 75 ? 'var(--warning)' : 'var(--danger)';
+    const total = Number(s.totalFee) || 0;
+    const paid  = Number(s.paidAmount) || 0;
+    const balance = Math.max(0, total - paid);
+    // Colour by the ACTUAL numbers, not just the stored label. A record marked
+    // 'Paid' with money still outstanding is the exact inconsistency that used
+    // to hide unpaid balances, so show the balance either way.
+    const feeClass = s.feeStatus === 'Paid' ? 'badge-green'
+                   : s.feeStatus === 'Partial' ? 'badge-orange'
+                   : s.feeStatus === 'Overdue' ? 'badge-red' : 'badge-red';
+    return `<tr>
       <td>
-        <button class="btn btn-ghost btn-sm" onclick="openAdminStudentModal('${s.id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteStudent('${s.id}')">Remove</button>
+        <div style="font-weight:600">${esc(s.name)}</div>
+        <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${esc(s.email)}</div>
+      </td>
+      <td style="font-family:var(--font-mono);font-size:0.76rem">${esc(s.rollNo)}</td>
+      <td>${s.batch ? esc(s.batch) : '<span style="color:var(--text-light);font-size:0.76rem">not enrolled</span>'}</td>
+      <td>${s.entryTest ? `<span class="badge badge-blue" style="font-family:var(--font-mono)">${esc(s.entryTest)}</span>` : '—'}</td>
+      <td><span style="font-family:var(--font-mono);font-weight:600;color:${attColor}">${att}%</span></td>
+      <td>
+        <span class="badge ${feeClass}">${esc(s.feeStatus || '—')}</span>
+        <div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">
+          ${balance > 0 ? 'Rs. ' + balance.toLocaleString() + ' due' : 'settled'}
+        </div>
+      </td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openAdminStudentModal('${escAttr(s.id)}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteStudent('${escAttr(s.id)}')">Remove</button>
       </td>
     </tr>`;
-  });
+  }).join('');
 }
 
 /** Opens the admin Add/Edit Student modal, pre-filled if `sid` is given. */
 function openAdminStudentModal(sid) {
+  const modal = document.getElementById('admin-student-modal');
+  if (!modal) return;
+  const V = window.MRValidate || {};
+  clearFieldErrors('admin-student-modal');
+
   const titleEl = document.getElementById('asm-modal-title');
   const delBtn  = document.getElementById('asm-delete-btn');
-  const etSel   = document.getElementById('asm-entry-test');
-  const bSel    = document.getElementById('asm-batch');
-  etSel.innerHTML = ''; ENTRY_TESTS.forEach(t => { const o = document.createElement('option'); o.value = t.name; o.textContent = t.name; etSel.appendChild(o); });
-  bSel.innerHTML  = ''; BATCHES.forEach(b => { const o = document.createElement('option'); o.value = b.name; o.textContent = b.name; bSel.appendChild(o); });
+  const pwWrap  = document.getElementById('asm-password-wrap');
 
-  if (sid) {
-    const s = STUDENTS_DB.find(st => st.id === sid); if (!s) return;
-    titleEl.textContent = 'Edit Student'; delBtn.style.display = 'inline-flex';
-    document.getElementById('asm-id').value          = s.id;
-    document.getElementById('asm-name').value        = s.name;
-    document.getElementById('asm-roll').value        = s.rollNo;
-    document.getElementById('asm-email').value       = s.email;
-    document.getElementById('asm-phone').value       = s.phone;
-    document.getElementById('asm-city').value        = s.city;
-    document.getElementById('asm-entry-test').value  = s.entryTest;
-    document.getElementById('asm-batch').value       = s.batch;
-    document.getElementById('asm-fee-status').value  = s.feeStatus;
-    document.getElementById('asm-total-fee').value   = s.totalFee;
-    document.getElementById('asm-paid-amount').value = s.paidAmount;
-    document.getElementById('asm-attendance').value  = s.attendance;
+  const s = sid ? STUDENTS_DB.find(st => st.id === sid) : null;
+  if (sid && !s) { showToast('That student is no longer in the list. Refresh the page.'); return; }
+
+  // Fill every dropdown at open time — see populateSelect() for why page-parse
+  // time doesn't work here.
+  populateSelect('asm-gender', V.GENDERS || ['Male', 'Female', 'Other'], { selected: s?.gender || '', placeholder: '— Select —' });
+  populateSelect('asm-feeStatus', V.FEE_STATUSES || ['Paid', 'Partial', 'Pending', 'Overdue'], {
+    selected: s?.feeStatus || 'Pending', placeholder: null,
+  });
+  populateSelect('asm-batch', BATCHES.map(b => b.name), {
+    selected: s?.batch || '', placeholder: '— Not enrolled yet —',
+    emptyText: 'No batches yet — create one on the Batches page',
+  });
+  populateSelect('asm-entryTest', ENTRY_TESTS.map(t => t.name), {
+    selected: s?.entryTest || '', placeholder: '— None —',
+    emptyText: 'No entry tests yet — create one on the Entry Tests page',
+  });
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val === null || val === undefined ? '' : val; };
+
+  if (s) {
+    titleEl.textContent = 'Edit Student';
+    delBtn.style.display = 'inline-flex';
+    set('asm-id', s.id);
+    set('asm-name', s.name);
+    set('asm-rollNo', s.rollNo);
+    set('asm-email', s.email);
+    set('asm-phone', s.phone);
+    set('asm-cnic', s.cnic);
+    set('asm-dob', (s.dob || '').slice(0, 10));   // <input type="date"> needs yyyy-mm-dd
+    set('asm-previousSchool', s.previousSchool);
+    set('asm-guardianName', s.guardianName);
+    set('asm-guardianPhone', s.guardianPhone);
+    set('asm-city', s.city);
+    set('asm-address', s.address);
+    set('asm-totalFee', s.totalFee);
+    set('asm-paidAmount', s.paidAmount);
+    set('asm-attendance', s.attendance);
+    if (pwWrap) pwWrap.style.display = 'none';
   } else {
-    titleEl.textContent = 'Add Student'; delBtn.style.display = 'none';
-    ['asm-id', 'asm-name', 'asm-roll', 'asm-email', 'asm-phone', 'asm-city'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('asm-fee-status').value  = 'Unpaid';
-    document.getElementById('asm-password').value = '';
-    document.getElementById('asm-total-fee').value   = '';
-    document.getElementById('asm-paid-amount').value = '0';
-    document.getElementById('asm-attendance').value  = '85';
+    titleEl.textContent = 'Add Student';
+    delBtn.style.display = 'none';
+    ['asm-id', 'asm-name', 'asm-rollNo', 'asm-email', 'asm-phone', 'asm-cnic', 'asm-dob',
+     'asm-previousSchool', 'asm-guardianName', 'asm-guardianPhone', 'asm-city',
+     'asm-address', 'asm-totalFee', 'asm-password'].forEach(id => set(id, ''));
+    set('asm-paidAmount', '0');
+    // Attendance defaults to 0, not 85. The old default invented a number that
+    // no attendance record supported, so a brand-new student appeared to have
+    // been present at classes that hadn't happened.
+    set('asm-attendance', '0');
+    if (pwWrap) pwWrap.style.display = 'block';
   }
   syncEntryTestFromBatch();
-  document.getElementById('admin-student-modal').style.display = 'flex';
+  modal.style.display = 'flex';
 }
-function closeAdminStudentModal() { document.getElementById('admin-student-modal').style.display = 'none'; }
 
-/** Creates or updates a student from the admin modal's fields. New students get empty course/grade data — enroll them via a batch afterwards. */
+function closeAdminStudentModal() {
+  clearFieldErrors('admin-student-modal');
+  const m = document.getElementById('admin-student-modal');
+  if (m) m.style.display = 'none';
+}
+
+/**
+ * Create or update a student.
+ *
+ * New students get empty course/grade data; enrolment into courses happens
+ * through the chosen batch, on the server.
+ */
 async function saveAdminStudent() {
-  const id         = document.getElementById('asm-id').value;
-  const name       = document.getElementById('asm-name').value.trim();
-  const rollNo     = document.getElementById('asm-roll').value.trim();
-  const email      = document.getElementById('asm-email').value.trim();
-  const phone      = document.getElementById('asm-phone').value.trim();
-  const city       = document.getElementById('asm-city').value.trim();
-  const password = document.getElementById('asm-password').value.trim();
-  const entryTest  = document.getElementById('asm-entry-test').value;
-  const batch      = document.getElementById('asm-batch').value;
-  const feeStatus  = document.getElementById('asm-fee-status').value;
-  const totalFee   = parseInt(document.getElementById('asm-total-fee').value) || 0;
-  const paidAmount = parseInt(document.getElementById('asm-paid-amount').value) || 0;
-  const attendance = parseInt(document.getElementById('asm-attendance').value) || 85;
+  const id = fv('asm-id');
+  const btn = document.getElementById('asm-save-btn');
+  const V = window.MRValidate;
 
-  if (!name || !email) { showToast('Name and email are required.'); return; }
+  // Keys match MRValidate.STUDENT_RULES so server-side errors map back onto
+  // the matching `asm-<key>` input.
+  const raw = {
+    name: fv('asm-name'),
+    rollNo: fv('asm-rollNo'),
+    email: fv('asm-email'),
+    phone: fv('asm-phone'),
+    cnic: fv('asm-cnic'),
+    gender: fv('asm-gender'),
+    dob: fv('asm-dob'),
+    city: fv('asm-city'),
+    address: fv('asm-address'),
+    previousSchool: fv('asm-previousSchool'),
+    guardianName: fv('asm-guardianName'),
+    guardianPhone: fv('asm-guardianPhone'),
+    batch: fv('asm-batch'),
+    entryTest: fv('asm-entryTest'),
+    feeStatus: fv('asm-feeStatus'),
+    totalFee: fv('asm-totalFee'),
+    paidAmount: fv('asm-paidAmount'),
+    attendance: fv('asm-attendance') === '' ? '0' : fv('asm-attendance'),
+  };
 
-  const payload = { name, rollNo, email, phone, city, entryTest, batch, feeStatus, totalFee, paidAmount, attendance };
+  const values = validateForm(V && V.STUDENT_RULES, raw, 'asm', 'admin-student-modal');
+  if (!values) return;
 
+  // Cross-field checks no single field can make on its own: paid <= total, a
+  // guardian number that isn't just the student's own number again, and a fee
+  // status that agrees with the amounts. On EDIT the server merges these
+  // against what's stored, so this pass is the fast-feedback copy only.
+  if (V && V.crossCheckStudent) {
+    const xErrors = V.crossCheckStudent(values);
+    if (Object.keys(xErrors).length) {
+      const orphaned = applyFieldErrors(xErrors, 'asm', 'admin-student-modal');
+      showToast(orphaned.length ? orphaned[0] : V.firstError(xErrors));
+      return;
+    }
+  }
+
+  const password = fv('asm-password').trim();
+  if (!id && password && password.length < 6) {
+    setFieldError('asm-password', 'Must be at least 6 characters, or leave blank.');
+    showToast('Password must be at least 6 characters, or leave it blank to generate one.');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     if (id) {
-      const updated = await apiFetch(`/students/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
+      const updated = await apiFetchDetailed(`/students/${encodeURIComponent(id)}`, {
+        method: 'PUT', body: JSON.stringify(values),
       });
       const idx = STUDENTS_DB.findIndex(s => s.id === id);
-      if (idx !== -1) STUDENTS_DB[idx] = updated;
+      if (idx !== -1) STUDENTS_DB[idx] = updated; else STUDENTS_DB.push(updated);
+      closeAdminStudentModal();
+      renderAdminStudents();
+      showToast('Student updated.');
     } else {
-      // CREATE — POST to /students
-      const created = await apiFetch('/students', {
+      const created = await apiFetchDetailed('/students', {
         method: 'POST',
-        body: JSON.stringify({ ...payload, ...(password ? { password } : {}) }),
+        body: JSON.stringify({ ...values, ...(password ? { password } : {}) }),
       });
       STUDENTS_DB.push(created.student);
+      closeAdminStudentModal();
+      renderAdminStudents();
+      // `created` only exists in this branch. The old code read
+      // created.tempPassword after the if/else, which threw a ReferenceError on
+      // every EDIT — and wrongly said "Student added" when updating.
+      showToast(created.tempPassword
+        ? `Student added. Temporary password: ${created.tempPassword} — copy it now, it can't be shown again.`
+        : 'Student added. They can log in with the password you set.');
     }
-    closeAdminStudentModal();
-    renderAdminStudents();
-    showToast(created.tempPassword
-      ? `Student added. Temp password: ${created.tempPassword}`
-      : 'Student added. Login with the password you set.');
+    // Enrolling into a batch changes that batch's studentIds server-side, so
+    // pull the fresh copy instead of leaving the page showing a stale roster.
+    try { BATCHES = await apiFetch('/batches'); } catch (e) { /* table still fine */ }
   } catch (err) {
-    showToast(err.message);
+    if (err.fieldErrors) {
+      const orphaned = applyFieldErrors(err.fieldErrors, 'asm', 'admin-student-modal');
+      showToast(orphaned.length ? orphaned[0] : err.message);
+    } else {
+      showToast(err.message);
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   }
 }
 
-function deleteCurrentStudent() { const id = document.getElementById('asm-id').value; if (id) deleteStudent(id); }
+function deleteCurrentStudent() { const id = fv('asm-id'); if (id) deleteStudent(id); }
+
 async function deleteStudent(sid) {
-  if (!confirm('Remove this student?')) return;
+  const s = STUDENTS_DB.find(x => x.id === sid);
+  if (!confirm(`Remove ${s ? s.name : 'this student'}? Their login, grades and fee history go with them. This cannot be undone.`)) return;
   try {
-    await apiFetch(`/students/${sid}`, { method: 'DELETE' });
-    const idx = STUDENTS_DB.findIndex(s => s.id === sid);
+    await apiFetchDetailed(`/students/${encodeURIComponent(sid)}`, { method: 'DELETE' });
+    const idx = STUDENTS_DB.findIndex(x => x.id === sid);
     if (idx !== -1) STUDENTS_DB.splice(idx, 1);
     closeAdminStudentModal();
+    // The server also pulls this student out of every batch roster.
+    try { BATCHES = await apiFetch('/batches'); } catch (e) { /* non-fatal */ }
     renderAdminStudents();
     showToast('Student removed.');
   } catch (err) {
@@ -2730,12 +3657,14 @@ function renderAdminTeachers() {
   if (statsEl) {
     const active   = TEACHERS_DB.filter(t => t.status === 'active').length;
     const inactive = TEACHERS_DB.filter(t => t.status === 'inactive').length;
-    const totalC   = TEACHERS_DB.reduce((a, t) => a + t.courseIds.length, 0);
+    // A teacher with no subject can never be assigned to anything, so surface
+    // the count instead of letting it sit invisible in the table.
+    const noSubject = TEACHERS_DB.filter(t => !(t.subjects || []).length).length;
     statsEl.innerHTML =
       `<div class="stat-card"><div class="stat-icon si-navy" style="font-family:var(--font-mono);font-weight:700">T</div><div class="stat-info"><div class="sv">${TEACHERS_DB.length}</div><div class="sl">Total Teachers</div></div></div>` +
       `<div class="stat-card"><div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">A</div><div class="stat-info"><div class="sv">${active}</div><div class="sl">Active</div></div></div>` +
       `<div class="stat-card"><div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">I</div><div class="stat-info"><div class="sv">${inactive}</div><div class="sl">Inactive</div></div></div>` +
-      `<div class="stat-card"><div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">C</div><div class="stat-info"><div class="sv">${totalC}</div><div class="sl">Total Courses</div></div></div>`;
+      `<div class="stat-card"><div class="stat-icon ${noSubject ? 'si-red' : 'si-blue'}" style="font-family:var(--font-mono);font-weight:700">S</div><div class="stat-info"><div class="sv">${noSubject}</div><div class="sl">No Subject Set</div></div></div>`;
   }
 
   const tbody  = document.getElementById('admin-teachers-tbody');
@@ -2743,116 +3672,499 @@ function renderAdminTeachers() {
   if (!tbody) return;
 
   let teachers = TEACHERS_DB;
-  if (search) teachers = teachers.filter(t => t.name.toLowerCase().includes(search) || (t.subjects || []).some(s => s.toLowerCase().includes(search)));
+  if (search) {
+    teachers = teachers.filter(t =>
+      (t.name || '').toLowerCase().includes(search) ||
+      (t.email || '').toLowerCase().includes(search) ||
+      (t.qualification || '').toLowerCase().includes(search) ||
+      (t.subjects || []).some(s => s.toLowerCase().includes(search)));
+  }
   tbody.innerHTML = '';
   if (!teachers.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No teachers found.</td></tr>'; return; }
 
-  teachers.forEach(t => {
-    const courseNames = t.courseIds.map(cid => COURSES[cid]?.subject || '?').join(', ') || '—';
-    tbody.innerHTML += `<tr>
-      <td><div style="font-weight:600">${t.name}</div><div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${t.email}</div></td>
-      <td>${(t.subjects || []).join(', ') || '—'}</td>
-      <td style="font-family:var(--font-mono);font-size:0.76rem">${t.phone}</td>
-      <td style="font-size:0.78rem;color:var(--text-mid)">${courseNames}</td>
-      <td><span class="badge ${t.status === 'active' ? 'badge-green' : 'badge-orange'}">${t.status}</span></td>
-      <td style="font-family:var(--font-mono);font-size:0.76rem">${t.joinDate}</td>
+  // Note the esc() on every interpolated value. These come straight from a
+  // form, so without escaping a name containing < or & mangles the row (and a
+  // deliberately crafted one would inject markup into the admin's page).
+  tbody.innerHTML = teachers.map(t => {
+    const courseNames = (t.courseIds || []).map(cid => COURSES[cid]?.title || COURSES[cid]?.subject).filter(Boolean).join(', ') || '—';
+    const subjects = (t.subjects || []);
+    return `<tr>
       <td>
-        <button class="btn btn-ghost btn-sm" onclick="openAdminTeacherModal('${t.id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteTeacher('${t.id}')">Remove</button>
+        <div style="font-weight:600">${esc(t.name)}</div>
+        <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${esc(t.email)}</div>
+      </td>
+      <td>${subjects.length
+            ? subjects.map(s => `<span class="badge badge-blue" style="margin:0 0.2rem 0.2rem 0">${esc(s)}</span>`).join('')
+            : '<span class="badge badge-red">none — cannot be assigned</span>'}</td>
+      <td style="font-family:var(--font-mono);font-size:0.76rem">${esc(t.phone)}</td>
+      <td style="font-size:0.78rem;color:var(--text-mid)">
+        ${esc(t.qualification || '—')}${t.experience ? ` · ${esc(t.experience)}y` : ''}
+        <div style="font-size:0.7rem;color:var(--text-light)">${esc(courseNames)}</div>
+      </td>
+      <td><span class="badge ${t.status === 'active' ? 'badge-green' : 'badge-orange'}">${esc(t.status)}</span></td>
+      <td style="font-family:var(--font-mono);font-size:0.76rem">${esc(fmtJoinDate(t.joinDate))}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="openAdminTeacherModal('${escAttr(t.id)}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTeacher('${escAttr(t.id)}')">Remove</button>
       </td>
     </tr>`;
-  });
+  }).join('');
 }
 
+/**
+ * joinDate is now stored as a sortable ISO date ('2026-08-30') instead of a
+ * locale string ('Aug 30, 2026'), because the old format sorted alphabetically
+ * — 'Apr' before 'Jan' — in every list that ordered by it. Format for display
+ * here, keeping any legacy value readable as-is.
+ */
+function fmtJoinDate(v) {
+  if (!v) return '—';
+  const s = String(v);
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;   // legacy locale string
+  const d = new Date(s + 'T00:00:00');
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Open the Add/Edit Teacher modal.
+ *
+ * Every dropdown is filled HERE rather than at page load, because SUBJECTS_DB /
+ * QUALIFICATIONS are empty until loadAppData() has resolved. The option lists
+ * come from window.MRValidate — the same arrays the server validates against —
+ * so the form physically cannot offer a value the API will reject.
+ */
 function openAdminTeacherModal(tid) {
+  const modal = document.getElementById('admin-teacher-modal');
+  if (!modal) return;
+  const V = window.MRValidate || {};
+  clearFieldErrors('admin-teacher-modal');
+
   const titleEl = document.getElementById('atm-modal-title');
   const delBtn  = document.getElementById('atm-delete-btn');
-  const pwEl = document.getElementById('atm-password');
-  if (tid) {
-    const t = TEACHERS_DB.find(x => x.id === tid); if (!t) return;
-    titleEl.textContent = 'Edit Teacher'; delBtn.style.display = 'inline-flex';
-    document.getElementById('atm-id').value      = t.id;
-    document.getElementById('atm-name').value    = t.name;
-    document.getElementById('atm-email').value   = t.email;
-    document.getElementById('atm-phone').value   = t.phone;
-    document.getElementById('atm-status').value  = t.status;
-    renderTeacherSubjectCheckboxes(t.subjects || []);
-    if (pwEl) { pwEl.value = ''; pwEl.closest('.form-group').style.display = 'none'; }
+  const pwWrap  = document.getElementById('atm-password-wrap');
+
+  const t = tid ? TEACHERS_DB.find(x => x.id === tid) : null;
+  if (tid && !t) { showToast('That teacher is no longer in the list. Refresh the page.'); return; }
+
+  populateSelect('atm-gender', V.GENDERS || ['Male', 'Female', 'Other'], {
+    selected: t?.gender || '', placeholder: '— Select —',
+  });
+  populateSelect('atm-qualification', V.QUALIFICATIONS || [], {
+    selected: t?.qualification || '', placeholder: '— Select —',
+  });
+  populateSelect('atm-status', [
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+  ], { selected: t?.status || 'active', placeholder: null });
+  renderSubjectCheckboxes('atm-subjects', t?.subjects || [], 'atm-subject-cb');
+
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val === null || val === undefined ? '' : val; };
+
+  if (t) {
+    titleEl.textContent = 'Edit Teacher';
+    delBtn.style.display = 'inline-flex';
+    set('atm-id', t.id);
+    set('atm-name', t.name);
+    set('atm-email', t.email);
+    set('atm-phone', t.phone);
+    set('atm-cnic', t.cnic);
+    // <input type="date"> only accepts yyyy-mm-dd; anything else silently
+    // renders blank, which used to look like the stored value had been lost.
+    set('atm-dob', (t.dob || '').slice(0, 10));
+    set('atm-specialization', t.specialization);
+    set('atm-experience', t.experience);
+    set('atm-city', t.city);
+    set('atm-address', t.address);
+    // A password is never sent back by the API (select:false on the schema), so
+    // there is nothing to prefill. Hiding the field also stops an admin from
+    // thinking a blank box means "clear the password".
+    if (pwWrap) pwWrap.style.display = 'none';
   } else {
-    titleEl.textContent = 'Add Teacher'; delBtn.style.display = 'none';
-    ['atm-id', 'atm-name', 'atm-email', 'atm-phone'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('atm-status').value = 'active';
-    renderTeacherSubjectCheckboxes([]);
-    if (pwEl) { pwEl.value = ''; pwEl.closest('.form-group').style.display = 'block'; }
+    titleEl.textContent = 'Add Teacher';
+    delBtn.style.display = 'none';
+    ['atm-id', 'atm-name', 'atm-email', 'atm-phone', 'atm-cnic', 'atm-dob',
+     'atm-specialization', 'atm-experience', 'atm-city', 'atm-address', 'atm-password']
+      .forEach(id => set(id, ''));
+    if (pwWrap) pwWrap.style.display = 'block';
   }
-  document.getElementById('admin-teacher-modal').style.display = 'flex';
+  modal.style.display = 'flex';
 }
-function closeAdminTeacherModal() { document.getElementById('admin-teacher-modal').style.display = 'none'; }
 
-// NEW
+function closeAdminTeacherModal() {
+  clearFieldErrors('admin-teacher-modal');
+  const m = document.getElementById('admin-teacher-modal');
+  if (m) m.style.display = 'none';
+}
+
+/**
+ * Create or update a teacher.
+ *
+ * Validation runs twice on purpose: once here through MRValidate.TEACHER_RULES
+ * so the admin gets a message under the exact field that's wrong, and again on
+ * the server with the identical rule set. The client pass is convenience only —
+ * skipping it (or calling the API directly) changes nothing about what gets
+ * stored.
+ */
 async function saveAdminTeacher() {
-  const id      = document.getElementById('atm-id').value;
-  const name    = document.getElementById('atm-name').value.trim();
-  const email   = document.getElementById('atm-email').value.trim();
-  const phone   = document.getElementById('atm-phone').value.trim();
-  const status  = document.getElementById('atm-status').value;
-  const subjects = [...document.querySelectorAll('.atm-subject-cb:checked')].map(cb => cb.value);
-  const password = (document.getElementById('atm-password')?.value || '').trim();
+  const id = fv('atm-id');
+  const btn = document.getElementById('atm-save-btn');
+  const V = window.MRValidate;
 
-  if (!name || !email) { showToast('Name and email are required.'); return; }
-  if (!subjects.length) { showToast('Select at least one subject.'); return; }
+  // Field names here must match the keys in TEACHER_RULES, because
+  // applyFieldErrors() maps `errors.<field>` onto the input `atm-<field>`.
+  const raw = {
+    name: fv('atm-name'),
+    email: fv('atm-email'),
+    phone: fv('atm-phone'),
+    cnic: fv('atm-cnic'),
+    gender: fv('atm-gender'),
+    dob: fv('atm-dob'),
+    qualification: fv('atm-qualification'),
+    specialization: fv('atm-specialization'),
+    experience: fv('atm-experience'),
+    city: fv('atm-city'),
+    address: fv('atm-address'),
+    status: fv('atm-status') || 'active',
+  };
 
-  const payload = { name, email, phone, subjects, status };
+  const values = validateForm(V && V.TEACHER_RULES, raw, 'atm', 'admin-teacher-modal');
+  if (!values) return;
 
+  // Subjects sit outside the rule engine: valid values come from the database,
+  // not from a pattern, so only the server can have the final say. Checking for
+  // "at least one" here just saves a round trip.
+  const subjects = readSubjectCheckboxes('atm-subject-cb');
+  if (!subjects.length) {
+    setFieldError('atm-subjects', 'Select at least one subject.');
+    showToast('Select at least one subject — a teacher with none can never be assigned to a course.');
+    return;
+  }
+  values.subjects = subjects;
+
+  const password = fv('atm-password').trim();
+  if (!id && password && password.length < 6) {
+    setFieldError('atm-password', 'Must be at least 6 characters, or leave blank.');
+    showToast('Password must be at least 6 characters, or leave it blank to generate one.');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     if (id) {
-      const updated = await apiFetch(`/teachers/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      const updated = await apiFetchDetailed(`/teachers/${encodeURIComponent(id)}`, {
+        method: 'PUT', body: JSON.stringify(values),
+      });
       const idx = TEACHERS_DB.findIndex(t => t.id === id);
-      if (idx !== -1) TEACHERS_DB[idx] = updated;
+      if (idx !== -1) TEACHERS_DB[idx] = updated; else TEACHERS_DB.push(updated);
       closeAdminTeacherModal();
       renderAdminTeachers();
       showToast('Teacher updated.');
     } else {
-      const created = await apiFetch('/teachers', {
+      const created = await apiFetchDetailed('/teachers', {
         method: 'POST',
-        body: JSON.stringify({ ...payload, ...(password ? { password } : {}) }),
+        body: JSON.stringify({ ...values, ...(password ? { password } : {}) }),
       });
       TEACHERS_DB.push(created.teacher);
       closeAdminTeacherModal();
       renderAdminTeachers();
+      // The generated password is shown exactly once and never again — it's
+      // hashed on the way in and select:false on the way out.
       showToast(created.tempPassword
-        ? `Teacher added. Temp password: ${created.tempPassword}`
-        : 'Teacher added. Login with the password you set.');
+        ? `Teacher added. Temporary password: ${created.tempPassword} — copy it now, it can't be shown again.`
+        : 'Teacher added. They can log in with the password you set.');
     }
   } catch (err) {
-    showToast(err.message);
+    // The API returns { message, errors: {field: why} }. Painting those inline
+    // is the difference between "Failed to update teacher" and knowing the CNIC
+    // is already on file.
+    if (err.fieldErrors) {
+      const orphaned = applyFieldErrors(err.fieldErrors, 'atm', 'admin-teacher-modal');
+      showToast(orphaned.length ? orphaned[0] : err.message);
+    } else {
+      showToast(err.message);
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
   }
 }
 
-
-function deleteCurrentTeacher() { const id = document.getElementById('atm-id').value; if (id) deleteTeacher(id); }
+function deleteCurrentTeacher() { const id = fv('atm-id'); if (id) deleteTeacher(id); }
 
 async function deleteTeacher(tid) {
-  if (!confirm('Remove this teacher?')) return;
+  const t = TEACHERS_DB.find(x => x.id === tid);
+  if (!confirm(`Remove ${t ? t.name : 'this teacher'}? Their login account is deleted too.`)) return;
   try {
-    await apiFetch(`/teachers/${tid}`, { method: 'DELETE' });
-    const idx = TEACHERS_DB.findIndex(t => t.id === tid);
-    if (idx !== -1) TEACHERS_DB.splice(idx, 1);
-    closeAdminTeacherModal();
-    renderAdminTeachers();
-    showToast('Teacher removed.');
+    await apiFetchDetailed(`/teachers/${encodeURIComponent(tid)}`, { method: 'DELETE' });
   } catch (err) {
-    showToast(err.message);
+    // 409 means the teacher still staffs a batch. The server lists exactly
+    // which ones, so ask rather than either failing silently or quietly
+    // leaving those subjects unstaffed.
+    if (err.status === 409) {
+      if (!confirm(`${err.message}\n\nDelete anyway and leave those unstaffed?`)) return;
+      try {
+        await apiFetchDetailed(`/teachers/${encodeURIComponent(tid)}?force=true`, { method: 'DELETE' });
+      } catch (e2) { showToast(e2.message); return; }
+    } else {
+      showToast(err.message);
+      return;
+    }
+  }
+  const idx = TEACHERS_DB.findIndex(x => x.id === tid);
+  if (idx !== -1) TEACHERS_DB.splice(idx, 1);
+  closeAdminTeacherModal();
+  // Batches may have lost an assignment, so refresh them from the server
+  // rather than trusting the copy in memory.
+  try { BATCHES = await apiFetch('/batches'); } catch (e) { /* table still renders */ }
+  renderAdminTeachers();
+  showToast('Teacher removed.');
+}
+
+// ──────────────────────────────────────────────────
+// ADMIN — SUBJECT MANAGEMENT
+//
+// Subjects are the root of the chain that decides whether a course is visible
+// to anybody at all:
+//
+//   Subject -> EntryTest.subjects[] -> Course.subject
+//           -> Teacher.subjects[]   -> Batch.subjectTeachers{subject: teacherId}
+//
+// Every link is exact, case-sensitive string equality, and a mismatch is
+// completely silent — the course just stops appearing, for the student, the
+// teacher, or both, with nothing logged. So this card does three things
+// deliberately:
+//
+//   1. Shows what depends on each subject BEFORE you can delete it.
+//   2. Renames through PATCH, which cascades the new spelling everywhere,
+//      rather than letting the Subject row drift away from the courses,
+//      teachers and batches still holding the old string.
+//   3. Refetches the dependent lists afterwards, because a rename changes data
+//      this page is holding in memory and a stale SUBJECTS_DB would put the old
+//      name back into the next dropdown.
+// ──────────────────────────────────────────────────
+
+// Which row is currently in inline-rename mode (a subject _id), or null.
+window._renamingSubjectId = null;
+
+/**
+ * Renders the subject table. Fetches with ?withUsage=true rather than reusing
+ * SUBJECTS_DB, because the usage counts only come back from that query and they
+ * are the whole point of the card — deleting a subject blind is how a batch
+ * loses a teacher slot.
+ */
+async function renderAdminSubjects() {
+  const tbody = document.getElementById('admin-subjects-tbody');
+  if (!tbody) return;
+
+  let subjects;
+  try {
+    subjects = await apiFetch('/subjects?withUsage=true');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;padding:1.25rem;color:var(--red)">Could not load subjects: ${esc(err.message)}</td></tr>`;
+    return;
+  }
+
+  // Keep the shared list and every dropdown fed from it in step.
+  SUBJECTS_DB = subjects.map(s => ({ _id: s._id, name: s.name, isCore: s.isCore }));
+
+  if (!subjects.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1.25rem;color:var(--text-light)">No subjects yet. Add one above — entry tests and courses cannot be created without at least one.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = subjects.map(s => {
+    const u  = s.usage || { teachers: [], courses: [], entryTests: [], batches: [], total: 0 };
+    const id = String(s._id);
+
+    // Usage is rendered as one badge per kind, with the actual names in the
+    // title attribute. A bare number ("3 courses") isn't enough to act on —
+    // you need to know WHICH course you're about to hide.
+    const bits = [];
+    if (u.courses.length)    bits.push(`<span class="badge badge-blue"  title="${escAttr(u.courses.join(', '))}">${u.courses.length} course${u.courses.length > 1 ? 's' : ''}</span>`);
+    if (u.teachers.length)   bits.push(`<span class="badge badge-green" title="${escAttr(u.teachers.join(', '))}">${u.teachers.length} teacher${u.teachers.length > 1 ? 's' : ''}</span>`);
+    if (u.entryTests.length) bits.push(`<span class="badge badge-navy"  title="${escAttr(u.entryTests.join(', '))}">${u.entryTests.length} entry test${u.entryTests.length > 1 ? 's' : ''}</span>`);
+    if (u.batches.length)    bits.push(`<span class="badge badge-orange" title="${escAttr(u.batches.join(', '))}">${u.batches.length} batch${u.batches.length > 1 ? 'es' : ''}</span>`);
+    const usageCell = bits.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${bits.join('')}</div>`
+      : '<span style="font-size:0.72rem;color:var(--text-light)">nothing yet — safe to remove</span>';
+
+    // Rename mode swaps just the name cell for an input, so the usage column
+    // stays visible while you're deciding.
+    if (window._renamingSubjectId === id) {
+      return `<tr>
+        <td>
+          <input type="text" class="form-control" id="rename-subject-inp" value="${escAttr(s.name)}" maxlength="40" style="height:32px"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();saveRenameSubject();}if(event.key==='Escape'){cancelRenameSubject();}">
+          <span class="field-hint">Renaming updates every course, teacher, entry test and batch using the old name.</span>
+        </td>
+        <td>${usageCell}</td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-primary btn-sm" onclick="saveRenameSubject()">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelRenameSubject()">Cancel</button>
+          </div>
+        </td>
+      </tr>`;
+    }
+
+    return `<tr>
+      <td>
+        <strong>${esc(s.name)}</strong>
+        ${s.isCore ? '<span class="badge badge-navy" style="margin-left:6px;font-size:0.62rem" title="Seeded subject the built-in entry tests depend on">core</span>' : ''}
+      </td>
+      <td>${usageCell}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-outline btn-sm" onclick="startRenameSubject('${escAttr(id)}')">Rename</button>
+          ${s.isCore
+            ? '<button class="btn btn-ghost btn-sm" disabled title="Core subjects cannot be deleted" style="opacity:0.45;cursor:not-allowed">Delete</button>'
+            : `<button class="btn btn-danger btn-sm" onclick="deleteSubject('${escAttr(id)}', '${escAttr(s.name)}')">Delete</button>`}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/**
+ * Re-pulls everything a subject name is embedded in. Called after a rename or a
+ * forced delete, both of which rewrite strings inside other collections — without
+ * this, the page keeps rendering the old spelling and the next dropdown built
+ * from memory would reintroduce it.
+ */
+async function refreshSubjectDependentData() {
+  try {
+    const [tests, courseList, teachers, batches] = await Promise.all([
+      apiFetch('/tests'),
+      apiFetch('/courses'),
+      apiFetch('/teachers'),
+      apiFetch('/batches'),
+    ]);
+    ENTRY_TESTS = tests;
+    COURSES = {};
+    courseList.forEach(c => { COURSES[c.id] = c; });
+    TEACHERS_DB = teachers;
+    BATCHES = batches;
+  } catch (err) {
+    console.error('Could not refresh subject-dependent data:', err.message);
+  }
+}
+
+async function addSubject() {
+  const inp = document.getElementById('new-subject-name');
+  const btn = document.getElementById('add-subject-btn');
+  if (!inp) return;
+
+  const name = inp.value.trim();
+  clearFieldErrors('admin-subjects-card');
+  if (!name) { setFieldError('new-subject-name', 'Enter a subject name.'); return; }
+  if (name.length < 2) { setFieldError('new-subject-name', 'Subject name is too short.'); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+  try {
+    const created = await apiFetchDetailed('/subjects', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+    inp.value = '';
+    await renderAdminSubjects();
+    renderTestTags();               // refills the "Subjects Taught" dropdown
+    showToast(`Subject "${created.name}" added.`);
+  } catch (err) {
+    // 409 means a case-variant already exists — the server tells us which, and
+    // that message is more useful than "duplicate".
+    setFieldError('new-subject-name', (err.fieldErrors && err.fieldErrors.name) || err.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Add Subject'; }
+  }
+}
+
+function startRenameSubject(id) {
+  window._renamingSubjectId = String(id);
+  renderAdminSubjects().then(() => {
+    const inp = document.getElementById('rename-subject-inp');
+    if (inp) { inp.focus(); inp.select(); }
+  });
+}
+
+function cancelRenameSubject() {
+  window._renamingSubjectId = null;
+  renderAdminSubjects();
+}
+
+async function saveRenameSubject() {
+  const id  = window._renamingSubjectId;
+  const inp = document.getElementById('rename-subject-inp');
+  if (!id || !inp) return;
+
+  const name = inp.value.trim();
+  if (!name) { setFieldError('rename-subject-inp', 'Enter a subject name.'); return; }
+
+  try {
+    const res = await apiFetchDetailed(`/subjects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
+    window._renamingSubjectId = null;
+    await refreshSubjectDependentData();
+    await renderAdminSubjects();
+    renderTestTags();
+
+    // The server reports what the cascade touched. Showing it is the difference
+    // between trusting the rename and wondering whether it half-applied.
+    const c = res.cascaded;
+    if (c) {
+      const parts = [];
+      if (c.courses)    parts.push(`${c.courses} course(s)`);
+      if (c.teachers)   parts.push(`${c.teachers} teacher(s)`);
+      if (c.entryTests) parts.push(`${c.entryTests} entry test(s)`);
+      if (c.batches)    parts.push(`${c.batches} batch(es)`);
+      showToast(parts.length
+        ? `Renamed to "${res.subject.name}" and updated ${parts.join(', ')}.`
+        : `Renamed to "${res.subject.name}".`);
+    } else {
+      showToast('Subject renamed.');
+    }
+  } catch (err) {
+    setFieldError('rename-subject-inp', (err.fieldErrors && err.fieldErrors.name) || err.message);
+  }
+}
+
+async function deleteSubject(id, name) {
+  if (!confirm(`Remove the subject "${name}"?`)) return;
+
+  try {
+    await apiFetchDetailed(`/subjects/${id}`, { method: 'DELETE' });
+    await renderAdminSubjects();
+    renderTestTags();
+    showToast(`"${name}" removed.`);
+    return;
+  } catch (err) {
+    // 409 = still in use. The server's message names every course, teacher,
+    // entry test and batch that depends on it, so put that in front of the
+    // admin verbatim instead of a generic "cannot delete".
+    if (err.status !== 409) { showToast(err.message); return; }
+    if (!confirm(`${err.message}\n\nRemove it anyway and strip it from all of them?`)) return;
+
+    try {
+      await apiFetchDetailed(`/subjects/${id}?force=true`, { method: 'DELETE' });
+      await refreshSubjectDependentData();
+      await renderAdminSubjects();
+      renderTestTags();
+      showToast(`"${name}" removed and detached from everything that used it.`);
+    } catch (err2) {
+      showToast(err2.message);
+    }
   }
 }
 
 // ──────────────────────────────────────────────────
 // ADMIN — ENTRY TEST MANAGEMENT
 // ──────────────────────────────────────────────────
-function renderAdminTests() {
-  if (!document.getElementById('admin-tests-container')) return;
-  renderTestTags();
-}
+//
+// renderAdminTests() used to live here. It guarded on `#admin-tests-container`,
+// an id that exists in no HTML file in this project, so it returned on its first
+// line every time it was called. renderTestTags() below is the real entry point
+// and the router calls it directly.
 
 /** Opens a small dynamically-built modal for editing one entry test's subject list. */
 function openEditTestSubjects(tid) {
@@ -2871,17 +4183,18 @@ function openEditTestSubjects(tid) {
   modal.innerHTML = `
     <div style="background:var(--white);border-radius:var(--radius-xl);padding:1.75rem;width:100%;max-width:420px;box-shadow:var(--shadow-lg);border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-        <h3 style="font-size:1rem;font-weight:600">${test.name} — Subjects</h3>
+        <h3 style="font-size:1rem;font-weight:600">${esc(test.name)} — Subjects</h3>
         <button onclick="closeEditTestSubjects()" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light)">&#215;</button>
       </div>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
         <select class="form-control" id="edit-test-subject-inp" style="flex:1">
           <option value="">— Choose subject —</option>
-          ${SUBJECTS_DB.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
+          ${subjectNames().map(n => `<option value="${escAttr(n)}">${esc(n)}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-sm" onclick="addSubjectToEditTest()">Add</button>
       </div>
       <div id="edit-test-subjects-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:1rem"></div>
+      <span class="field-hint" style="display:block;margin-bottom:1rem">Removing a subject that still has courses under it will be refused — the courses would vanish for everyone.</span>
       <div style="display:flex;gap:0.65rem;justify-content:flex-end">
         <button class="btn btn-ghost btn-sm" onclick="closeEditTestSubjects()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="saveEditTestSubjects()">Save</button>
@@ -2909,10 +4222,14 @@ function removeEditTestSubject(sub) {
 function renderEditTestSubjectTags() {
   const el = document.getElementById('edit-test-subjects-list');
   if (!el) return;
+  if (!window._editTestSubjects.length) {
+    el.innerHTML = '<span style="font-size:0.72rem;color:var(--text-light)">No subjects — this test cannot hold any courses.</span>';
+    return;
+  }
   el.innerHTML = window._editTestSubjects.map(s => `
     <span style="display:inline-flex;align-items:center;gap:4px;background:var(--blue-pale);color:var(--navy);font-size:0.72rem;padding:2px 8px;border-radius:20px;font-weight:500">
-      ${s}
-      <button onclick="removeEditTestSubject('${s}')" style="background:none;border:none;cursor:pointer;color:var(--text-light);font-size:0.8rem;line-height:1;padding:0">&#215;</button>
+      ${esc(s)}
+      <button onclick="removeEditTestSubject('${escAttr(s)}')" style="background:none;border:none;cursor:pointer;color:var(--text-light);font-size:0.8rem;line-height:1;padding:0">&#215;</button>
     </span>`).join('');
 }
 
@@ -2920,13 +4237,25 @@ async function saveEditTestSubjects() {
   const test = ENTRY_TESTS.find(t => t.id === window._editingTestId);
   if (!test) { closeEditTestSubjects(); return; }
 
+  // PUT /tests/:id/subjects answers 409 with a warning when a removal would
+  // orphan courses. Surface it and let the admin confirm rather than silently
+  // hiding somebody's course.
+  const send = async (force) => apiFetchDetailed(
+    `/tests/${test.id}/subjects${force ? '?force=true' : ''}`,
+    { method: 'PUT', body: JSON.stringify({ subjects: [...window._editTestSubjects] }) },
+  );
+
   try {
-    const updated = await apiFetch(`/tests/${test.id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ subjects: [...window._editTestSubjects] }),
-    });
+    let updated;
+    try {
+      updated = await send(false);
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      if (!confirm(`${err.message}\n\nApply anyway?`)) return;
+      updated = await send(true);
+    }
     const idx = ENTRY_TESTS.findIndex(t => t.id === test.id);
-    if (idx !== -1) ENTRY_TESTS[idx] = updated;
+    if (idx !== -1) ENTRY_TESTS[idx] = updated.entryTest || updated;
     renderTestTags();
     closeEditTestSubjects();
     showToast('Subjects updated.');
@@ -2940,70 +4269,127 @@ function closeEditTestSubjects() {
   if (modal) modal.style.display = 'none';
 }
 
-/** Renders both the small tag-list summary and the full entry-tests table on the admin Tests page. */
+/**
+ * Renders the tag-list summary, the entry-tests table, AND fills the
+ * "Subjects Taught" dropdown in the add form.
+ *
+ * That last part is not incidental: the dropdown in tests.html ships with only
+ * a placeholder option, so before this it was permanently empty, meaning
+ * addSubjectToNewTest() had nothing to add and "Add Entry Test" was rejected
+ * every single time for having no subjects.
+ */
 function renderTestTags() {
   const el = document.getElementById('test-tag-list');
   if (!el) return;
-  el.innerHTML = ENTRY_TESTS.map(t => `
-    <div class="tag-item" id="tag-${t.id}">
-      <span style="width:7px;height:7px;border-radius:50%;background:${t.color};flex-shrink:0"></span>
-      ${t.name}
-      <button onclick="removeTest('${t.id}')" title="Remove">&#215;</button>
-    </div>`).join('');
+
+  el.innerHTML = ENTRY_TESTS.length
+    ? ENTRY_TESTS.map(t => `
+      <div class="tag-item" id="tag-${escAttr(t.id)}">
+        <span style="width:7px;height:7px;border-radius:50%;background:${escAttr(t.color || '#1B5FAD')};flex-shrink:0"></span>
+        ${esc(t.name)}
+        <button onclick="removeTest('${escAttr(t.id)}')" title="Remove">&#215;</button>
+      </div>`).join('')
+    : '<span style="font-size:0.78rem;color:var(--text-light)">No entry tests yet.</span>';
+
+  // Fill the add-form subject picker from the live subject list.
+  const subjSel = document.getElementById('new-test-subject-inp');
+  if (subjSel) {
+    const names = subjectNames();
+    subjSel.innerHTML = names.length
+      ? '<option value="">— Choose subject —</option>' +
+        names.map(n => `<option value="${escAttr(n)}">${esc(n)}</option>`).join('')
+      : '<option value="">No subjects yet — add one above first</option>';
+    renderNewTestSubjectTags();
+  }
 
   const tbody = document.getElementById('tests-tbody');
-  if (tbody) tbody.innerHTML = ENTRY_TESTS.map((t, i) => `<tr>
-    <td style="font-family:var(--font-mono)">${i + 1}</td>
-    <td><strong>${t.name}</strong><div style="font-size:0.7rem;color:var(--text-light)">${t.desc}</div></td>
-    <td>
-      <div style="display:flex;flex-wrap:wrap;gap:3px">
-        ${(t.subjects || []).map(s => `<span class="badge badge-blue" style="font-size:0.65rem">${s}</span>`).join('')}
-        <button onclick="openEditTestSubjects('${t.id}')" style="background:none;border:1px dashed var(--border);border-radius:3px;font-size:0.65rem;padding:1px 6px;cursor:pointer;color:var(--text-light)">edit</button>
-      </div>
-    </td>
-    <td><span class="badge" style="background:${t.color}22;color:${t.color}">${t.name}</span></td>
-    <td><button class="btn btn-danger btn-sm" onclick="removeTest('${t.id}')">Remove</button></td>
-  </tr>`).join('');
+  if (tbody) {
+    tbody.innerHTML = ENTRY_TESTS.length
+      ? ENTRY_TESTS.map((t, i) => {
+          const color = t.color || '#1B5FAD';
+          const subs  = t.subjects || [];
+          return `<tr>
+        <td style="font-family:var(--font-mono)">${i + 1}</td>
+        <td><strong>${esc(t.name)}</strong><div style="font-size:0.7rem;color:var(--text-light)">${esc(t.desc || '')}</div></td>
+        <td>
+          <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">
+            ${subs.length
+              ? subs.map(s => `<span class="badge badge-blue" style="font-size:0.65rem">${esc(s)}</span>`).join('')
+              : '<span class="badge badge-red" style="font-size:0.65rem">none — no course can use this test</span>'}
+            <button onclick="openEditTestSubjects('${escAttr(t.id)}')" style="background:none;border:1px dashed var(--border);border-radius:3px;font-size:0.65rem;padding:1px 6px;cursor:pointer;color:var(--text-light)">edit</button>
+          </div>
+        </td>
+        <td><span class="badge" style="background:${escAttr(color)}22;color:${escAttr(color)}">${esc(t.name)}</span></td>
+        <td><button class="btn btn-danger btn-sm" onclick="removeTest('${escAttr(t.id)}')">Remove</button></td>
+      </tr>`;
+        }).join('')
+      : '<tr><td colspan="5" style="text-align:center;padding:1.25rem;color:var(--text-light)">No entry tests yet.</td></tr>';
+  }
 }
 
 
 async function addTest() {
   const nameEl = document.getElementById('new-test-name');
   const descEl = document.getElementById('new-test-desc');
-  if (!nameEl || !nameEl.value.trim()) { showToast('Enter a program name.'); return; }
-  if (!window._newTestSubjects || !window._newTestSubjects.length) { showToast('Add at least one subject.'); return; }
+  const btn    = document.getElementById('add-test-btn');
+  if (!nameEl) return;
 
-  const colors = ['#1B5FAD', '#0E8A5F', '#C47C08', '#7c3aed', '#C0392B', '#0369A1'];
+  clearFieldErrors('add-test-card');
+  if (!nameEl.value.trim()) { setFieldError('new-test-name', 'Enter a program name.'); return; }
+  if (!window._newTestSubjects || !window._newTestSubjects.length) {
+    setFieldError('new-test-subject-inp', 'Pick at least one subject — a test with no subjects can hold no courses.');
+    return;
+  }
+
+  // No `color` here on purpose. This used to send a client-picked colour from a
+  // local palette indexed by ENTRY_TESTS.length, which (a) collided as soon as
+  // one test was deleted and re-added, and (b) was thrown away regardless —
+  // routes/tests.js only accepts name, desc and subjects, and assigns the colour
+  // itself. Sending it just made the client look like it was in control.
   const payload = {
     name: nameEl.value.trim().toUpperCase(),
-    color: colors[ENTRY_TESTS.length % colors.length],
     desc: descEl?.value.trim() || 'Entry test preparation program',
     subjects: [...window._newTestSubjects],
   };
 
+  if (btn) btn.disabled = true;
   try {
-    const created = await apiFetch('/tests', { method: 'POST', body: JSON.stringify(payload) });
+    const created = await apiFetchDetailed('/tests', { method: 'POST', body: JSON.stringify(payload) });
     ENTRY_TESTS.push(created);
-    renderTestTags();
     nameEl.value = '';
     if (descEl) descEl.value = '';
     window._newTestSubjects = [];
-    const sl = document.getElementById('new-test-subjects-list');
-    if (sl) sl.innerHTML = '';
+    renderNewTestSubjectTags();
+    renderTestTags();
     showToast('Entry test "' + created.name + '" added.');
   } catch (err) {
-    showToast(err.message);
+    const orphans = applyFieldErrors(err.fieldErrors, 'new-test', 'add-test-card');
+    if (!err.fieldErrors || orphans.length) showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
 
 
 async function removeTest(id) {
-  if (!confirm('Remove this entry test?')) return;
+  const test = ENTRY_TESTS.find(t => t.id === id);
+  const label = test ? `"${test.name}"` : 'this entry test';
+
+  // Batches point at an entry test by name, and students inherit it from the
+  // batch. Deleting the test underneath them leaves both dangling, so say so
+  // before asking.
+  const usedBy = BATCHES.filter(b => test && b.entryTest === test.name).map(b => b.name);
+  const warn = usedBy.length
+    ? `\n\n${usedBy.length} batch(es) still use it: ${usedBy.join(', ')}.`
+    : '';
+
+  if (!confirm(`Remove ${label}?${warn}`)) return;
   try {
-    await apiFetch(`/tests/${id}`, { method: 'DELETE' });
+    await apiFetchDetailed(`/tests/${id}`, { method: 'DELETE' });
     ENTRY_TESTS = ENTRY_TESTS.filter(t => t.id !== id);
     renderTestTags();
+    if (document.getElementById('admin-subjects-tbody')) renderAdminSubjects();
     showToast('Test removed.');
   } catch (err) {
     showToast(err.message);
@@ -3013,30 +4399,17 @@ async function removeTest(id) {
 // ──────────────────────────────────────────────────
 // 21. LOGIN
 // ──────────────────────────────────────────────────
-function setupLogin() {
-  const form = document.getElementById('login-form');
-  if (!form) return;
-  form.addEventListener('submit', async e => {
-    e.preventDefault();
-    const email = document.getElementById('email').value.trim().toLowerCase();
-    const pass  = document.getElementById('password').value;
-    const errEl = document.getElementById('login-error');
-
-    try {
-      const data = await apiFetch('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password: pass }),
-      });
-      saveSession(data.token, data.user);
-      const redirects = { student: 'Student/dashboard.html', teacher: 'Teacher/dashboard.html', admin: 'Admin/index.html' };
-      window.location.href = redirects[data.user.role] || 'index.html';
-    } catch (err) {
-      if (errEl) errEl.textContent = err.message || 'Invalid email or password.';
-    }
-  });
-  const passInput = document.getElementById('password');
-  if (passInput) passInput.addEventListener('keydown', e => { if (e.key === 'Enter') form.dispatchEvent(new Event('submit')); });
-}
+//
+// setupLogin() used to live here. It was dead code — it looked for
+// `#login-form` and `#login-error`, neither of which exists in any HTML file in
+// this project (login.html uses a plain div layout with a button calling
+// doLogin(), plus `#login-err`). So it bailed on its own second line, every
+// time, on every page.
+//
+// The live login implementation is the inline doLogin() at the bottom of
+// public/login.html. There is deliberately only one now: having two made it
+// possible to "fix" the login in the copy that never runs. If you're looking for
+// the login logic, it is in login.html.
 
 // ──────────────────────────────────────────────────
 // 22. TOAST NOTIFICATIONS (bottom-right confirmation messages)
@@ -3082,359 +4455,76 @@ function renderBatchTeacherSlots() {
 }
 
 // ──────────────────────────────────────────────────
-// ADMIN SPA ROUTER
-//    The Admin area is a single HTML shell (`page-content` div) that swaps
-//    its contents based on `location.hash`. Each route below defines the
-//    HTML to inject and a `render()` function to populate it with data.
+// RETIRED: ADMIN SPA ROUTER
+//
+// A ~330-line `const ADMIN_ROUTES = {...}` object used to live here, plus
+// navigateTo() and initAdminSPA() further down. The Admin area was once a
+// single HTML shell (`<div id="page-content">`) that swapped its innerHTML
+// based on location.hash. It has been a real multi-page app for a while now:
+// Admin/dashboard.html, students.html, teachers.html, courses.html,
+// batches.html and tests.html are actual files, and the page router in §16
+// finds each one by its element id.
+//
+// It was deleted rather than left in place because it was actively harmful:
+//
+//  1. It was the last place in the whole project where a user could type a
+//     subject name as free text — `<input type="text" id="new-test-subject-inp"
+//     placeholder="e.g. Biology">`. Its own render hook tried to fix that by
+//     assigning `.innerHTML` to that element, which does nothing at all on an
+//     <input>. So arbitrary strings could reach EntryTest.subjects, and since
+//     every subject comparison in this codebase is case-sensitive, "biology"
+//     would silently match nothing.
+//
+//  2. It was the source of several phantom element ids that app.js still read
+//     but no live page contained — `asm-password`, `atm-subjects-list` — which
+//     is why the Add Student and Save Teacher buttons threw a TypeError and
+//     failed 100% of the time. Those ids now exist in the real .html files.
+//
+//  3. It was still reachable. `initAdminSPA()` fired on any page containing
+//     `id="page-content"`, and Student/index.html — a stale copy of the old
+//     admin shell — still had it, so admin templates were being injected into
+//     the student shell.
+//
+// If you need to add an admin screen, create a real .html file modelled on
+// Admin/courses.html, give it a unique container id, and add one line to the
+// router in §16. Do not reintroduce a hash-routed shell.
 // ──────────────────────────────────────────────────
-const ADMIN_ROUTES = {
-  dashboard: {
-    title: 'Dashboard',
-    html: () => `
-      <div class="page-header"><h1>Overview</h1><p>Academy-wide summary and recent activity.</p></div>
-      <div id="admin-overview" class="stats-row" style="margin-bottom:1.5rem"></div>
-      <div class="grid-2" style="gap:1.25rem">
-        <div class="manage-table-card">
-          <div class="manage-table-head">
-            <h3>Recent Students</h3>
-            <a href="#students" class="btn btn-ghost btn-sm" onclick="navigateTo('#students')">View All</a>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Name</th><th>Roll No</th><th>Batch</th><th>Fee Status</th></tr></thead>
-              <tbody id="admin-recent-students"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="manage-table-card">
-          <div class="manage-table-head">
-            <h3>Batch Summary</h3>
-            <a href="#batches" class="btn btn-ghost btn-sm" onclick="navigateTo('#batches')">Manage</a>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Batch</th><th>Test</th><th>Students</th><th>Status</th></tr></thead>
-              <tbody id="admin-batch-summary"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>`,
-    render: () => {
-      const mk = (ic, letter, val, label) =>
-        `<div class="stat-card">
-          <div class="stat-icon ${ic}" style="font-family:var(--font-mono);font-weight:700">${letter}</div>
-          <div class="stat-info"><div class="sv">${val}</div><div class="sl">${label}</div></div>
-        </div>`;
 
-      const overviewEl = document.getElementById('admin-overview');
-      if (overviewEl) {
-        overviewEl.innerHTML =
-          mk('si-blue',  'S', STUDENTS_DB.length, 'Total Students') +
-          mk('si-navy',  'T', TEACHERS_DB.length, 'Teachers') +
-          mk('si-green', 'B', BATCHES.filter(b => b.status === 'active').length, 'Active Batches') +
-          mk('si-blue',  'C', Object.keys(COURSES).length, 'Courses') +
-          mk('si-red',   'F', STUDENTS_DB.filter(s => s.feeStatus !== 'Paid').length, 'Fee Pending') +
-          mk('si-orange','G', STUDENTS_DB.flatMap(s => s.assignments.filter(a => a.submitted && !a.approved)).length, 'Pending Approvals');
-      }
+// The old renderTeacherSubjectCheckboxes() lived here. It has been replaced by
+// the generic renderSubjectCheckboxes(containerId, selected, cssClass) in the
+// shared-helpers section near the top of this file, which the batch form uses
+// too — one implementation instead of two that could drift. It also read the id
+// `atm-subjects-list`, which existed in no live HTML file, so Save Teacher threw
+// a TypeError and failed on every attempt.
 
-      const rsEl = document.getElementById('admin-recent-students');
-      if (rsEl) {
-        rsEl.innerHTML = !STUDENTS_DB.length
-          ? '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1.5rem;font-size:0.82rem">No students enrolled yet.</td></tr>'
-          : STUDENTS_DB.slice(0, 5).map(s => `
-            <tr>
-              <td>
-                <div style="font-weight:600">${s.name}</div>
-                <div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">${s.email}</div>
-              </td>
-              <td style="font-family:var(--font-mono);font-size:0.76rem">${s.rollNo}</td>
-              <td>${s.batch}</td>
-              <td><span class="badge ${s.feeStatus === 'Paid' ? 'badge-green' : s.feeStatus === 'Partially Paid' ? 'badge-orange' : 'badge-red'}">${s.feeStatus}</span></td>
-            </tr>`).join('');
-      }
 
-      const bsEl = document.getElementById('admin-batch-summary');
-      if (bsEl) {
-        bsEl.innerHTML = !BATCHES.length
-          ? '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1.5rem;font-size:0.82rem">No batches created yet.</td></tr>'
-          : BATCHES.map(b => `
-            <tr>
-              <td><strong>${b.name}</strong></td>
-              <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${b.entryTest}</span></td>
-              <td style="font-family:var(--font-mono)">${b.studentIds.length}</td>
-              <td><span class="badge ${b.status === 'active' ? 'badge-green' : 'badge-orange'}">${b.status}</span></td>
-            </tr>`).join('');
-      }
-    }
-  },
-
-  students: {
-    title: 'Students',
-    topbarAction: () => `<button class="btn btn-primary btn-sm" onclick="openAdminStudentModal(null)">Add Student</button>`,
-    html: () => `
-      <div class="page-header"><h1>Student Management</h1><p>Enroll, edit, and manage all students across batches.</p></div>
-      <div class="card" style="margin-bottom:1.25rem">
-        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end">
-          <div style="flex:1;min-width:200px">
-            <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.3rem">Search</label>
-            <input type="text" class="form-control" id="admin-student-search" placeholder="Name, roll no, email..." oninput="renderAdminStudents()" style="height:36px">
-          </div>
-          <div style="min-width:160px">
-            <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.3rem">Batch</label>
-            <select class="form-control" id="admin-batch-filter" onchange="renderAdminStudents()" style="height:36px">
-              <option value="all">All Batches</option>
-              ${BATCHES.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}
-            </select>
-          </div>
-          <div style="min-width:160px">
-            <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.3rem">Fee Status</label>
-            <select class="form-control" id="admin-fee-filter" onchange="renderAdminStudents()" style="height:36px">
-              <option value="all">All Statuses</option>
-              <option value="Paid">Paid</option>
-              <option value="Partially Paid">Partially Paid</option>
-              <option value="Unpaid">Unpaid</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <div class="manage-table-card">
-        <div class="manage-table-head"><h3>All Students <span id="admin-student-count" style="font-family:var(--font-mono);font-weight:400;color:var(--text-light);font-size:0.72rem"></span></h3></div>
-        <div class="table-wrap"><table><thead><tr><th>Student</th><th>Roll No</th><th>Batch</th><th>Entry Test</th><th>Attendance</th><th>Fee Status</th><th>Actions</th></tr></thead><tbody id="admin-students-tbody"></tbody></table></div>
-      </div>
-      <div class="modal-overlay" id="admin-student-modal" style="display:none">
-        <div class="modal-box">
-          <div class="modal-header"><h3 id="asm-modal-title">Add Student</h3><button class="modal-close" onclick="closeAdminStudentModal()">&#215;</button></div>
-          <input type="hidden" id="asm-id">
-          <div class="grid-2">
-            <div class="form-group"><label>Full Name</label><input type="text" class="form-control" id="asm-name"></div>
-            <div class="form-group"><label>Roll Number</label><input type="text" class="form-control" id="asm-roll"></div>
-            <div class="form-group"><label>Email</label><input type="email" class="form-control" id="asm-email"></div>
-            <div class="form-group"><label>Password (optional)</label><input type="password" class="form-control" id="asm-password" placeholder="Leave blank to auto-generate"></div>
-            <div class="form-group"><label>Phone</label><input type="text" class="form-control" id="asm-phone"></div>
-            <div class="form-group"><label>City</label><input type="text" class="form-control" id="asm-city"></div>
-            <div class="form-group"><label>Entry Test</label><select class="form-control" id="asm-entry-test">${ENTRY_TESTS.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Batch</label><select class="form-control" id="asm-batch" onchange="syncEntryTestFromBatch()">${BATCHES.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Fee Status</label><select class="form-control" id="asm-fee-status"><option value="Unpaid">Unpaid</option><option value="Partially Paid">Partially Paid</option><option value="Paid">Paid</option></select></div>
-            <div class="form-group"><label>Total Fee (Rs.)</label><input type="number" class="form-control" id="asm-total-fee"></div>
-            <div class="form-group"><label>Amount Paid (Rs.)</label><input type="number" class="form-control" id="asm-paid-amount"></div>
-            <div class="form-group"><label>Attendance %</label><input type="number" class="form-control" id="asm-attendance" min="0" max="100"></div>
-          </div>
-          <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
-            <button class="btn btn-ghost btn-sm" onclick="closeAdminStudentModal()">Cancel</button>
-            <button class="btn btn-danger btn-sm" id="asm-delete-btn" onclick="deleteCurrentStudent()" style="display:none">Delete</button>
-            <button class="btn btn-primary btn-sm" onclick="saveAdminStudent()">Save</button>
-          </div>
-        </div>
-      </div>`,
-    render: renderAdminStudents
-  },
-
-  teachers: {
-    title: 'Teachers',
-    topbarAction: () => `<button class="btn btn-primary btn-sm" onclick="openAdminTeacherModal(null)">Add Teacher</button>`,
-    html: () => `
-      <div class="page-header"><h1>Teacher Management</h1><p>Manage teacher accounts and course assignments.</p></div>
-      <div class="stats-row" id="teacher-stats-row" style="margin-bottom:1.25rem"></div>
-      <div class="manage-table-card">
-        <div class="manage-table-head"><h3>All Teachers</h3><input type="text" class="form-control" id="teacher-search" placeholder="Search..." oninput="renderAdminTeachers()" style="height:32px;width:200px"></div>
-        <div class="table-wrap"><table><thead><tr><th>Teacher</th><th>Subject</th><th>Phone</th><th>Courses</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="admin-teachers-tbody"></tbody></table></div>
-      </div>
-      <div class="modal-overlay" id="admin-teacher-modal" style="display:none">
-        <div class="modal-box">
-          <div class="modal-header"><h3 id="atm-modal-title">Add Teacher</h3><button class="modal-close" onclick="closeAdminTeacherModal()">&#215;</button></div>
-          <input type="hidden" id="atm-id">
-          <div class="grid-2">
-            <div class="form-group"><label>Full Name</label><input type="text" class="form-control" id="atm-name"></div>
-            <div class="form-group"><label>Email</label><input type="email" class="form-control" id="atm-email"></div>
-            <div class="form-group"><label>Phone</label><input type="text" class="form-control" id="atm-phone"></div>
-            <div class="form-group" style="grid-column:1/-1">
-              <label>Subjects Taught</label>
-              <div id="atm-subjects-list" style="display:flex;flex-wrap:wrap;gap:10px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>
-            </div>
-            <div class="form-group"><label>Password (optional)</label><input type="password" class="form-control" id="atm-password" placeholder="Leave blank to auto-generate"></div>
-            <div class="form-group"><label>Status</label><select class="form-control" id="atm-status"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-          </div>
-          <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
-            <button class="btn btn-ghost btn-sm" onclick="closeAdminTeacherModal()">Cancel</button>
-            <button class="btn btn-danger btn-sm" id="atm-delete-btn" onclick="deleteCurrentTeacher()" style="display:none">Delete</button>
-            <button class="btn btn-primary btn-sm" onclick="saveAdminTeacher()">Save</button>
-          </div>
-        </div>
-      </div>`,
-    render: renderAdminTeachers
-  },
-
-  batches: {
-    title: 'Batches',
-    topbarAction: () => `<button class="btn btn-primary btn-sm" onclick="openAdminBatchModal(null)">Create Batch</button>`,
-    html: () => `
-      <div class="page-header"><h1>Batch Management</h1><p>Each batch maps one teacher per subject based on the entry test curriculum.</p></div>
-      <div class="stats-row" id="batch-stats-row" style="margin-bottom:1.25rem"></div>
-      <div id="admin-batches-grid" class="grid-auto"></div>
-      <div class="modal-overlay" id="admin-batch-modal" style="display:none">
-        <div class="modal-box" style="max-width:560px">
-          <div class="modal-header">
-            <h3 id="abm-modal-title">Create Batch</h3>
-            <button class="modal-close" onclick="closeAdminBatchModal()">&#215;</button>
-          </div>
-          <input type="hidden" id="abm-id">
-          <div class="grid-2">
-            <div class="form-group" style="grid-column:1/-1">
-              <label>Batch Name</label>
-              <input type="text" class="form-control" id="abm-name" placeholder="MDCAT Alpha 2025">
-            </div>
-            <div class="form-group">
-              <label>Entry Test</label>
-              <select class="form-control" id="abm-entry-test" onchange="renderBatchTeacherSlots()" style="height:36px">
-                ${ENTRY_TESTS.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Start Date</label>
-              <input type="date" class="form-control" id="abm-start">
-            </div>
-            <div class="form-group">
-              <label>Status</label>
-              <select class="form-control" id="abm-status">
-                <option value="upcoming">Upcoming</option>
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid)">
-              Subject Teachers
-              <span style="font-weight:400;color:var(--text-light);text-transform:none;letter-spacing:0"> — one teacher per subject</span>
-            </label>
-            <div id="abm-teacher-slots" style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden"></div>
-          </div>
-
-          <div class="form-group">
-            <label>Assign Students</label>
-            <div id="abm-student-list" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem">
-              ${STUDENTS_DB.map(s => `
-                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;border-radius:4px">
-                  <input type="checkbox" id="scb-${s.id}" value="${s.id}">
-                  <label for="scb-${s.id}" style="cursor:pointer;font-size:0.82rem;flex:1">
-                    <strong>${s.name}</strong>
-                    <span style="color:var(--text-light);font-family:var(--font-mono);font-size:0.7rem;margin-left:6px">${s.rollNo}</span>
-                  </label>
-                </div>`).join('')}
-            </div>
-          </div>
-
-          <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
-            <button class="btn btn-ghost btn-sm" onclick="closeAdminBatchModal()">Cancel</button>
-            <button class="btn btn-danger btn-sm" id="abm-delete-btn" onclick="deleteCurrentBatch()" style="display:none">Delete Batch</button>
-            <button class="btn btn-primary btn-sm" onclick="saveAdminBatch()">Save Batch</button>
-          </div>
-        </div>
-      </div>`,
-    render: renderAdminBatches
-  },
-
-  tests: {
-    title: 'Entry Tests',
-    html: () => `
-      <div class="page-header"><h1>Entry Test Management</h1><p>Configure entry test programs and their subjects.</p></div>
-      <div class="card" style="margin-bottom:1.5rem">
-        <div class="card-title">Active Programs</div>
-        <div class="tag-list" id="test-tag-list"></div>
-      </div>
-      <div class="grid-2" style="gap:1.25rem;align-items:start">
-        <div class="card">
-          <div class="card-title">Add New Entry Test</div>
-          <div class="form-group"><label>Program Name</label><input type="text" class="form-control" id="new-test-name" placeholder="e.g. GAT, SAT..."></div>
-          <div class="form-group"><label>Description</label><textarea class="form-control" id="new-test-desc" rows="2"></textarea></div>
-          <div class="form-group">
-            <label>Subjects Taught</label>
-            <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
-              <input type="text" class="form-control" id="new-test-subject-inp" placeholder="e.g. Biology" style="flex:1">
-              <button class="btn btn-outline btn-sm" onclick="addSubjectToNewTest()">Add</button>
-            </div>
-            <div id="new-test-subjects-list" style="display:flex;flex-wrap:wrap;gap:5px;min-height:28px;padding:4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"></div>
-          </div>
-          <button class="btn btn-primary btn-full" onclick="addTest()">Add Entry Test</button>
-        </div>
-        <div class="manage-table-card">
-          <div class="manage-table-head"><h3>All Programs</h3></div>
-          <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Subjects</th><th>Tag</th><th>Action</th></tr></thead><tbody id="tests-tbody"></tbody></table></div>
-        </div>
-      </div>`,
-    render: () => {
-      renderTestTags();
-      // Reset the "new test" subject builder each time this page is opened.
-      window._newTestSubjects = [];
-      const subSel = document.getElementById('new-test-subject-inp');
-      if (subSel) {
-        subSel.innerHTML = '<option value="">— Choose subject —</option>' +
-          SUBJECTS_DB.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
-      }
-      const sl = document.getElementById('new-test-subjects-list');
-      if (sl) sl.innerHTML = '';
-    }
-  },
-  courses: {
-    title: 'Courses',
-    topbarAction: () => `<button class="btn btn-primary btn-sm" onclick="openAdminCourseModal()">Add Course</button>`,
-    html: () => `
-      <div class="page-header"><h1>Course Management</h1><p>Create courses and hand off curriculum editing to teachers.</p></div>
-      <div id="admin-courses-grid" class="grid-auto"></div>
-      <div class="modal-overlay" id="admin-course-modal" style="display:none">
-        <div class="modal-box">
-          <div class="modal-header"><h3>Add Course</h3><button class="modal-close" onclick="closeAdminCourseModal()">&#215;</button></div>
-          <div class="grid-2">
-            <div class="form-group"><label>Title</label><input type="text" class="form-control" id="acm2-title" placeholder="MDCAT Biology Intensive"></div>
-            <div class="form-group">
-              <label>Subject</label>
-              <select class="form-control" id="acm2-subject">
-                ${SUBJECTS_DB.map(s => `<option value="${s.name}">${s.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group"><label>Icon (1 letter)</label><input type="text" class="form-control" id="acm2-icon" maxlength="1" placeholder="B"></div>
-            <div class="form-group"><label>Teacher</label>
-              <select class="form-control" id="acm2-teacher">
-                ${TEACHERS_DB.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}
-              </select>
-            </div>
-            <div class="form-group" style="grid-column:1/-1"><label>Description</label><textarea class="form-control" id="acm2-desc"></textarea></div>
-          </div>
-          <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
-            <button class="btn btn-ghost btn-sm" onclick="closeAdminCourseModal()">Cancel</button>
-            <button class="btn btn-primary btn-sm" onclick="saveAdminCourse()">Save</button>
-          </div>
-        </div>
-      </div>`,
-    render: renderAdminCourses,
-  },
-};
-
-function renderTeacherSubjectCheckboxes(selected = []) {
-  const el = document.getElementById('atm-subjects-list');
-  if (!el) return;
-  if (!SUBJECTS_DB.length) {
-    el.innerHTML = '<span style="font-size:0.78rem;color:var(--text-light)">No subjects defined yet — add some in Entry Tests first.</span>';
-    return;
-  }
-  el.innerHTML = SUBJECTS_DB.map(s => `
-    <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer">
-      <input type="checkbox" class="atm-subject-cb" value="${s.name}" ${selected.includes(s.name) ? 'checked' : ''}>
-      ${s.name}
-    </label>`).join('');
-}
-
+/**
+ * A batch already belongs to an entry test, so once a batch is chosen the entry
+ * test is decided — leaving it editable let an admin file a student under MDCAT
+ * while their batch prepared for ECAT, and nothing downstream reconciled the
+ * two.
+ *
+ * The element id is `asm-entryTest` (matching the STUDENT_RULES key), not
+ * `asm-entry-test`; the old name meant this function silently found nothing and
+ * the two fields could drift apart unchecked.
+ */
 function syncEntryTestFromBatch() {
-  const batchName = document.getElementById('asm-batch').value;
-  const batch = BATCHES.find(b => b.name === batchName);
-  const etSel = document.getElementById('asm-entry-test');
-  if (batch && etSel) {
-    etSel.value = batch.entryTest;
-    etSel.disabled = true;
-  } else if (etSel) {
-    etSel.disabled = false;
+  const bSel  = document.getElementById('asm-batch');
+  const etSel = document.getElementById('asm-entryTest');
+  if (!bSel || !etSel) return;
+  const batch = BATCHES.find(b => b.name === bSel.value);
+  if (batch && batch.entryTest) {
+    // Only force the value if the batch's entry test is actually one of the
+    // options — otherwise the assignment is a silent no-op and the select keeps
+    // whatever was there, which is worse than leaving it editable.
+    const hasOption = [...etSel.options].some(o => o.value === batch.entryTest);
+    if (hasOption) {
+      etSel.value = batch.entryTest;
+      etSel.disabled = true;
+      return;
+    }
   }
+  etSel.disabled = false;
 }
 
 
@@ -3577,68 +4667,369 @@ function closeAdminBatchModal() {
 }
 
 
+// ── Admin: Dashboard ──────────────────────────────────────────────────────
+// Backs public/Admin/dashboard.html (router trigger: #admin-overview).
+//
+// This function previously existed ONLY inside dashboard.html's inline
+// <script> block. When that block was commented out to fix the inline-script
+// shadowing bug, the definition disappeared with it — but the router in §16
+// still calls renderAdminDashboard(), so the page threw a ReferenceError and
+// rendered nothing. This is the real, backend-driven replacement: it reads the
+// globals loadAppData() populates instead of localStorage.
+
+function mkStatCard(iconClass, letter, value, label) {
+  return `<div class="stat-card">
+      <div class="stat-icon ${iconClass}" style="font-family:var(--font-mono);font-weight:700">${letter}</div>
+      <div class="stat-info"><div class="sv">${value}</div><div class="sl">${label}</div></div>
+    </div>`;
+}
+
+function renderAdminDashboard() {
+  const students = STUDENTS_DB || [];
+  const teachers = TEACHERS_DB || [];
+  const batches  = BATCHES || [];
+  const courses  = Object.values(COURSES);
+
+  const overviewEl = document.getElementById('admin-overview');
+  if (overviewEl) {
+    const activeBatches = batches.filter(b => b.status === 'active').length;
+    const unpaidFees    = students.filter(s => s.feeStatus !== 'Paid').length;
+    const pendingGrades = students.flatMap(s =>
+      (s.assignments || []).filter(a => a.submitted && !a.approved)
+    ).length;
+
+    overviewEl.innerHTML =
+      mkStatCard('si-blue',   'S', students.length,     'Total Students') +
+      mkStatCard('si-navy',   'T', teachers.length,     'Teachers') +
+      mkStatCard('si-green',  'B', activeBatches,       'Active Batches') +
+      mkStatCard('si-blue',   'C', courses.length,      'Courses') +
+      mkStatCard('si-red',    'F', unpaidFees,          'Fee Pending') +
+      mkStatCard('si-orange', 'G', pendingGrades,       'Pending Grading');
+  }
+
+  const rsEl = document.getElementById('admin-recent-students');
+  if (rsEl) {
+    if (!students.length) {
+      rsEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1rem;font-size:0.82rem">No students yet.</td></tr>';
+    } else {
+      rsEl.innerHTML = students.slice(0, 5).map(s => {
+        const feeClass = s.feeStatus === 'Paid' ? 'badge-green'
+                       : s.feeStatus === 'Partially Paid' ? 'badge-orange'
+                       : 'badge-red';
+        return `<tr>
+            <td><strong>${s.name}</strong><div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">${s.email}</div></td>
+            <td style="font-family:var(--font-mono);font-size:0.76rem">${s.rollNo}</td>
+            <td>${s.batch || '—'}</td>
+            <td><span class="badge ${feeClass}">${s.feeStatus}</span></td>
+          </tr>`;
+      }).join('');
+    }
+  }
+
+  const bsEl = document.getElementById('admin-batch-summary');
+  if (bsEl) {
+    if (!batches.length) {
+      bsEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1rem;font-size:0.82rem">No batches yet — create one from the Batches page.</td></tr>';
+    } else {
+      bsEl.innerHTML = batches.map(b => {
+        const statusClass = b.status === 'active' ? 'badge-green' : 'badge-orange';
+        return `<tr>
+            <td><strong>${b.name}</strong></td>
+            <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${b.entryTest}</span></td>
+            <td style="font-family:var(--font-mono)">${(b.studentIds || []).length}</td>
+            <td><span class="badge ${statusClass}">${b.status}</span></td>
+          </tr>`;
+      }).join('');
+    }
+  }
+}
+
+// ── Admin: Courses ────────────────────────────────────────────────────────
+// Backs public/Admin/courses.html. A Course is the "shell" (title, subject,
+// teacher, styling); the assigned teacher fills in weeks/topics from their
+// own Courses page via openCourseEditor().
+//
+// Why the subject string matters so much: batch auto-enrollment (see
+// routes/batches.js) finds courses by matching Course.subject against the
+// batch's EntryTest.subjects list. A course whose subject isn't required by
+// any entry test will never auto-enroll a single student, so we surface that
+// as a visible warning on the card rather than letting it fail silently.
+
+const COURSE_COLOR_TINTS = {
+  '#1B5FAD': '#EBF2FB',
+  '#0E8A5F': '#E7F5EF',
+  '#C47C08': '#FCF3E3',
+  '#7c3aed': '#F1EAFE',
+  '#C0392B': '#FBEDEB',
+};
+
+/** True if any entry test requires this subject — i.e. auto-enrollment can reach it. */
+function subjectIsRequiredByAnyTest(subject) {
+  return ENTRY_TESTS.some(t => (t.subjects || []).includes(subject));
+}
+
+function countCourseTopics(c) {
+  return (c.weeks || []).reduce((n, w) => n + (w.topics || []).length, 0);
+}
+
 function renderAdminCourses() {
   const grid = document.getElementById('admin-courses-grid');
   if (!grid) return;
-  grid.innerHTML = '';
-  const courses = Object.values(COURSES);
+
+  const courses = Object.values(COURSES).sort((a, b) => a.id - b.id);
+
+  const statsEl = document.getElementById('course-stats-row');
+  if (statsEl) {
+    const topics    = courses.reduce((n, c) => n + countCourseTopics(c), 0);
+    const noContent = courses.filter(c => countCourseTopics(c) === 0).length;
+    const orphaned  = courses.filter(c => !subjectIsRequiredByAnyTest(c.subject)).length;
+    statsEl.innerHTML = `
+      <div class="stat-card"><div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">C</div><div class="stat-info"><div class="sv">${courses.length}</div><div class="sl">Total Courses</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">T</div><div class="stat-info"><div class="sv">${topics}</div><div class="sl">Topics Published</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">E</div><div class="stat-info"><div class="sv">${noContent}</div><div class="sl">Awaiting Curriculum</div></div></div>
+      <div class="stat-card"><div class="stat-icon si-red" style="font-family:var(--font-mono);font-weight:700">!</div><div class="stat-info"><div class="sv">${orphaned}</div><div class="sl">Unreachable Subject</div></div></div>`;
+  }
+
   if (!courses.length) {
-    grid.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-light)">No courses yet — click "Add Course" to create one.</div>';
+    grid.innerHTML = `
+      <div style="grid-column:1/-1;text-align:center;padding:2.5rem 1.5rem;background:var(--white);
+                  border:1px dashed var(--border);border-radius:var(--radius-xl)">
+        <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:0.5rem">
+          No courses yet
+        </div>
+        <p style="font-size:0.82rem;color:var(--text-mid);max-width:460px;margin:0 auto 1rem;line-height:1.6">
+          Click <strong>Add Course</strong> above to create one. Pick a subject that one of your
+          entry tests already requires — that's what lets students in a matching batch
+          enroll automatically. Once the course exists, its assigned teacher builds the
+          weeks and topics from their own Courses page.
+        </p>
+        <button class="btn btn-primary btn-sm" onclick="openAdminCourseModal(null)">Add Course</button>
+      </div>`;
     return;
   }
-  courses.forEach(c => {
-    grid.innerHTML += `
+
+  grid.innerHTML = courses.map(c => {
+    const topics   = countCourseTopics(c);
+    const weeks    = (c.weeks || []).length;
+    const enrolled = (STUDENTS_DB || []).filter(s => (s.enrolledCourseIds || []).includes(c.id)).length;
+    const reachable = subjectIsRequiredByAnyTest(c.subject);
+    // Course.teacher holds an ID now, so printing it raw showed admins 'T001'
+    // where they expected a name. teacherLabel() also handles the deleted-teacher
+    // case, which used to render as a bare id with no hint that it was dangling.
+    const teacherName = c.teacher ? esc(teacherLabel(c.teacher)) : '<em>no teacher assigned</em>';
+
+    return `
       <div class="card">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
-          <div style="width:36px;height:36px;border-radius:var(--radius);background:${c.colorLight};color:${c.color};display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-weight:700">${c.icon}</div>
-          <div><div style="font-weight:600">${c.title}</div><div style="font-size:0.72rem;color:var(--text-light)">${c.subject} · ${c.teacher}</div></div>
+          <div style="width:36px;height:36px;border-radius:var(--radius);background:${escAttr(c.colorLight || '#EBF2FB')};
+                      color:${escAttr(c.color || '#1B5FAD')};display:flex;align-items:center;justify-content:center;
+                      font-family:var(--font-mono);font-weight:700;flex-shrink:0">${esc(c.icon || '?')}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;color:var(--text-dark)">${esc(c.title)}</div>
+            <div style="font-size:0.72rem;color:var(--text-light)">
+              ${esc(c.subject)} &middot; ${teacherName}
+            </div>
+          </div>
+          <span class="badge badge-blue">${enrolled} students</span>
         </div>
-        <p style="font-size:0.8rem;color:var(--text-mid);margin-bottom:0.75rem">${c.description}</p>
+
+        <p style="font-size:0.8rem;color:var(--text-mid);margin-bottom:0.75rem">
+          ${c.description ? esc(c.description) : '<em style="color:var(--text-light)">No description.</em>'}
+        </p>
+
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
+          <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem;text-align:center">
+            <div style="font-size:1rem;font-weight:700;font-family:var(--font-mono)">${weeks}</div>
+            <div style="font-size:0.62rem;color:var(--text-light);text-transform:uppercase">Weeks</div>
+          </div>
+          <div style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem;text-align:center">
+            <div style="font-size:1rem;font-weight:700;font-family:var(--font-mono)">${topics}</div>
+            <div style="font-size:0.62rem;color:var(--text-light);text-transform:uppercase">Topics</div>
+          </div>
+        </div>
+
+        ${reachable ? '' : `
+          <div style="font-size:0.72rem;color:#C0392B;background:#FBEDEB;border-radius:var(--radius);
+                      padding:0.45rem 0.6rem;margin-bottom:0.75rem;line-height:1.5">
+            No entry test requires <strong>${esc(c.subject)}</strong>, so no batch will auto-enroll
+            students here. Add the subject to an entry test, or change this course's subject.
+          </div>`}
+
+        ${topics ? '' : `
+          <div style="font-size:0.72rem;color:var(--text-mid);background:var(--bg);border-radius:var(--radius);
+                      padding:0.45rem 0.6rem;margin-bottom:0.75rem;line-height:1.5">
+            Curriculum is empty — ${c.teacher ? esc(teacherLabel(c.teacher)) : 'the assigned teacher'} needs to add weeks and topics.
+          </div>`}
+
         <div style="display:flex;gap:6px">
-          <button class="btn btn-outline btn-sm" onclick="deleteAdminCourse(${c.id})">Delete</button>
+          <button class="btn btn-outline btn-sm" onclick="openAdminCourseModal(${Number(c.id)})">Edit</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteAdminCourse(${Number(c.id)})">Delete</button>
         </div>
       </div>`;
-  });
+  }).join('');
 }
 
-function openAdminCourseModal() {
-  ['acm2-title', 'acm2-icon', 'acm2-desc'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('admin-course-modal').style.display = 'flex';
-}
-function closeAdminCourseModal() { document.getElementById('admin-course-modal').style.display = 'none'; }
+/**
+ * Opens the course modal. Pass a course id to edit, or null/undefined to create.
+ * Populates the subject + teacher dropdowns here rather than in the HTML, because
+ * this is a static page — SUBJECTS_DB/TEACHERS_DB aren't loaded until
+ * loadAppData() has run, long after the markup was parsed.
+ */
+function openAdminCourseModal(id = null) {
+  const modal = document.getElementById('admin-course-modal');
+  if (!modal) return;
 
+  const course = id != null ? COURSES[id] : null;
+
+  const subjSel = document.getElementById('acm2-subject');
+  if (subjSel) {
+    const names = subjectNames();
+    if (!names.length) {
+      subjSel.innerHTML = '<option value="">— no subjects defined —</option>';
+    } else {
+      subjSel.innerHTML = names
+        .map(n => `<option value="${escAttr(n)}">${esc(n)}${subjectIsRequiredByAnyTest(n) ? '' : ' (not in any entry test)'}</option>`)
+        .join('');
+    }
+  }
+
+  // All teachers are listed, annotated with what they teach, so the admin can
+  // pick sensibly. Filtering the list down to matching teachers would risk an
+  // empty dropdown and no way to assign anyone at all.
+  //
+  // Option VALUES are teacher IDS, not names. They used to be names, which meant
+  // Course.teacher held a display string: renaming a teacher orphaned every
+  // course they taught, and two teachers with the same name were indistinguishable.
+  // teacherLabel() turns the stored id back into a name for display.
+  const teachSel = document.getElementById('acm2-teacher');
+  if (teachSel) {
+    if (!TEACHERS_DB.length) {
+      teachSel.innerHTML = '<option value="">— no teachers yet —</option>';
+    } else {
+      teachSel.innerHTML = '<option value="">— unassigned —</option>' + TEACHERS_DB
+        .map(t => {
+          const subs = (t.subjects || []).join(', ') || 'no subjects set';
+          return `<option value="${escAttr(t.id)}">${esc(t.name)} (${esc(subs)})</option>`;
+        })
+        .join('');
+    }
+  }
+
+  document.getElementById('acm2-modal-title').textContent = course ? 'Edit Course' : 'Add Course';
+  document.getElementById('acm2-id').value    = course ? course.id : '';
+  document.getElementById('acm2-title').value = course ? (course.title || '') : '';
+  document.getElementById('acm2-icon').value  = course ? (course.icon || '') : '';
+  document.getElementById('acm2-desc').value  = course ? (course.description || '') : '';
+  if (subjSel  && course) subjSel.value  = course.subject || '';
+  // Legacy rows may still store a name here rather than an id, so resolve it
+  // through teacherFromRef() instead of assigning course.teacher raw — a name
+  // would match no <option> now and silently reset the field to "unassigned".
+  if (teachSel && course) {
+    const t = teacherFromRef(course.teacher);
+    teachSel.value = t ? t.id : '';
+  }
+  const colorSel = document.getElementById('acm2-color');
+  if (colorSel) colorSel.value = course ? (course.color || '#1B5FAD') : '#1B5FAD';
+
+  const delBtn = document.getElementById('acm2-delete-btn');
+  if (delBtn) delBtn.style.display = course ? 'inline-flex' : 'none';
+
+  const batchSel = document.getElementById('acm2-batch');
+  if (batchSel) {
+    batchSel.innerHTML = BATCHES.length
+      ? BATCHES.map(b => `<option value="${escAttr(b.id)}">${esc(b.name)}</option>`).join('')
+      : '<option value="">— no batches yet —</option>';
+    batchSel.disabled = !!course;   // locked once created
+    if (course) batchSel.value = course.batchId;
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeAdminCourseModal() {
+  const modal = document.getElementById('admin-course-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+/** Creates (POST) or updates (PUT) a course depending on whether acm2-id is set. */
 async function saveAdminCourse() {
-  const title = document.getElementById('acm2-title').value.trim();
-  const subject = document.getElementById('acm2-subject').value;
-  const icon = document.getElementById('acm2-icon').value.trim().toUpperCase() || subject[0];
-  const teacher = document.getElementById('acm2-teacher').value;
+  const editingId   = document.getElementById('acm2-id').value;
+  const title       = document.getElementById('acm2-title').value.trim();
+  const subject     = document.getElementById('acm2-subject').value;
+  const teacher     = document.getElementById('acm2-teacher').value;   // a teacher id
   const description = document.getElementById('acm2-desc').value.trim();
-  if (!title || !subject) { showToast('Title and subject are required.'); return; }
+  const color       = document.getElementById('acm2-color').value || '#1B5FAD';
+  const icon        = (document.getElementById('acm2-icon').value.trim() || subject.charAt(0)).toUpperCase();
 
-  const existingIds = Object.keys(COURSES).map(Number);
-  const id = existingIds.length ? Math.max(...existingIds) + 1 : 1;
-  const colors = { '#1B5FAD': '#EBF2FB' }; // fallback map, extend as needed
-  const color = '#1B5FAD';
+  clearFieldErrors('admin-course-modal');
+  if (!title)   { setFieldError('acm2-title', 'Course title is required.'); return; }
+  if (!subject) { setFieldError('acm2-subject', 'Pick a subject — add one on the Entry Tests page if this list is empty.'); return; }
 
+  const payload = {
+    title, subject, icon, color,
+    colorLight: COURSE_COLOR_TINTS[color] || '#EBF2FB',
+    teacher, description,
+    ...(editingId ? {} : { batchId: document.getElementById('acm2-batch').value }),
+  };
+  if (!editingId && !payload.batchId) { setFieldError('acm2-batch', 'Pick a batch.'); return; }
+
+  const btn = document.getElementById('acm2-save-btn');
+  if (btn) btn.disabled = true;
   try {
-    const created = await apiFetch('/courses', {
-      method: 'POST',
-      body: JSON.stringify({ id, title, subject, icon, color, colorLight: '#EBF2FB', teacher, description, weeks: [] }),
-    });
-    COURSES[created.id] = created;
+    if (editingId) {
+      // Note: no `weeks` key in the payload, so the teacher's existing
+      // curriculum is left untouched by an admin edit.
+      const updated = await apiFetchDetailed(`/courses/${editingId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+      COURSES[updated.id] = updated;
+      showToast('Course updated.');
+    } else {
+      // No `id` and no `weeks` here on purpose. The client used to compute
+      // `Math.max(...Object.keys(COURSES)) + 1` from its own cached copy, which
+      // collides whenever two tabs create a course or the page has been open
+      // since before someone else added one — and the server ignored it anyway
+      // (COURSE_META_WRITABLE has no `id`), so the collision showed up as an
+      // unexplained failure. The server assigns the id, with a retry loop.
+      const created = await apiFetchDetailed('/courses', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      COURSES[created.id] = created;
+      showToast('Course created.');
+    }
     closeAdminCourseModal();
     renderAdminCourses();
-    showToast('Course created.');
   } catch (err) {
-    showToast(err.message);
+    // The server names the offending field (title / subject / teacher), and the
+    // teacher-subject mismatch message in particular explains exactly what to
+    // fix, so it must not be flattened into a generic toast.
+    const orphans = applyFieldErrors(err.fieldErrors, 'acm2', 'admin-course-modal');
+    if (!err.fieldErrors || orphans.length) showToast(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
   }
+}
+
+/** Delete button inside the edit modal. */
+function deleteCurrentCourse() {
+  const id = document.getElementById('acm2-id').value;
+  if (id) deleteAdminCourse(Number(id));
 }
 
 async function deleteAdminCourse(id) {
-  if (!confirm('Delete this course? Students enrolled in it will lose access.')) return;
+  const course = COURSES[id];
+  const enrolled = (STUDENTS_DB || []).filter(s => (s.enrolledCourseIds || []).includes(Number(id))).length;
+  const warning = enrolled
+    ? `\n\n${enrolled} student(s) are enrolled and will lose access to its content.`
+    : '';
+  if (!confirm(`Delete "${course ? course.title : 'this course'}"?${warning}`)) return;
+
   try {
     await apiFetch(`/courses/${id}`, { method: 'DELETE' });
     delete COURSES[id];
+    closeAdminCourseModal();
     renderAdminCourses();
     showToast('Course removed.');
   } catch (err) {
@@ -3711,51 +5102,19 @@ async function deleteCurrentBatch() {
 }
 
 
-// ── SPA router (renders synchronously after inserting HTML, so there's no flash of empty content) ──
-
-function navigateTo(hash) {
-  const routeKey = (hash || '').replace('#', '') || 'dashboard';
-  const route    = ADMIN_ROUTES[routeKey];
-  if (!route) { navigateTo('#dashboard'); return; }
-
-  const content = document.getElementById('page-content');
-  if (!content) return;
-
-  const titleEl = document.getElementById('topbar-title');
-  if (titleEl) titleEl.textContent = route.title;
-
-  // Swap out the topbar's page-specific action button (e.g. "Add Student").
-  const existingBtn = document.getElementById('topbar-action-btn');
-  if (existingBtn) existingBtn.remove();
-  if (route.topbarAction) {
-    const topbarRight = document.querySelector('.topbar-right');
-    if (topbarRight) {
-      const wrapper = document.createElement('div');
-      wrapper.id = 'topbar-action-btn';
-      wrapper.innerHTML = route.topbarAction();
-      topbarRight.prepend(wrapper);
-    }
-  }
-
-  content.innerHTML = route.html();     // inject HTML immediately (no fade = no flash)
-  if (route.render) route.render();     // then populate it with live data
-
-  document.querySelectorAll('.nav-item').forEach(link => {
-    link.classList.remove('active');
-    if (link.getAttribute('href') === '#' + routeKey) link.classList.add('active');
-  });
-
-  content.scrollTop = 0;
-}
-
-function initAdminSPA() {
-  if (!document.getElementById('page-content')) return;
-  navigateTo(location.hash || '#dashboard');
-  window.addEventListener('hashchange', () => navigateTo(location.hash));
-}
+// navigateTo() and initAdminSPA() used to live here. Both were part of the
+// retired hash-routing Admin shell — see the "RETIRED: ADMIN SPA ROUTER" note
+// where ADMIN_ROUTES used to be defined. Nothing calls them any more; the
+// router in §16 no longer has an `if (document.getElementById('page-content'))`
+// branch.
 
 // Temp working list while building a new entry test in the "Add Entry Test" form.
 window._newTestSubjects = [];
+// Working copies for the edit-subjects modal. Declared here so they exist before
+// any handler can read them — tests.html used to declare them in an inline
+// <script>, which meant a second set of the same globals shadowing these.
+window._editTestSubjects = [];
+window._editingTestId    = null;
 
 function addSubjectToNewTest() {
   const inp = document.getElementById('new-test-subject-inp');
@@ -3766,7 +5125,10 @@ function addSubjectToNewTest() {
     renderNewTestSubjectTags();
   }
   inp.value = '';
-  inp.focus();
+  // Clear any "pick at least one subject" error now that one is picked.
+  inp.classList.remove('is-invalid');
+  const holder = inp.parentElement;
+  if (holder) holder.querySelectorAll('.field-error').forEach(el => el.remove());
 }
 function removeNewTestSubject(sub) {
   window._newTestSubjects = window._newTestSubjects.filter(s => s !== sub);
@@ -3775,10 +5137,14 @@ function removeNewTestSubject(sub) {
 function renderNewTestSubjectTags() {
   const el = document.getElementById('new-test-subjects-list');
   if (!el) return;
+  if (!window._newTestSubjects.length) {
+    el.innerHTML = '<span style="font-size:0.72rem;color:var(--text-light)">No subjects picked yet.</span>';
+    return;
+  }
   el.innerHTML = window._newTestSubjects.map(s => `
     <span style="display:inline-flex;align-items:center;gap:4px;background:var(--blue-pale);color:var(--navy);font-size:0.72rem;padding:2px 8px;border-radius:20px;font-weight:500">
-      ${s}
-      <button onclick="removeNewTestSubject('${s}')" style="background:none;border:none;cursor:pointer;color:var(--text-light);font-size:0.8rem;line-height:1;padding:0">&#215;</button>
+      ${esc(s)}
+      <button onclick="removeNewTestSubject('${escAttr(s)}')" style="background:none;border:none;cursor:pointer;color:var(--text-light);font-size:0.8rem;line-height:1;padding:0">&#215;</button>
     </span>`).join('');
 }
 

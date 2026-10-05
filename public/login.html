@@ -30,36 +30,110 @@
     <div class="auth-box">
       <h2>Welcome Back</h2>
       <p>Login to continue your preparation journey</p>
-      <div class="test-creds">
-        <strong>Test Credentials (Frontend Demo)</strong>
-         student@mindroute.pk / 1234 (Student)<br>
-         teacher@mindroute.pk / 1234 (Teacher)<br>
-         admin@mindroute.pk / 1234 (Admin)
-      </div>
-      <div class="form-group"><label>Email Address</label><input type="email" id="email" class="form-control" placeholder="student@mindroute.pk"></div>
-      <div class="form-group"><label>Password</label><input type="password" id="password" class="form-control" placeholder="Enter your password"></div>
-      <div class="form-group"><label>Login As</label>
-        <select id="role" class="form-control">
-          <option value="student">Student</option>
-          <option value="teacher">Teacher</option>
-          <option value="admin">Admin</option>
-        </select>
-      </div>
+      <!--
+        REMOVED: the "Test Credentials (Frontend Demo)" box that used to sit here.
+
+        It printed the admin, teacher and student email addresses AND passwords
+        in plain text, in a visible styled callout, to every single visitor of
+        the login page. Combined with there being no rate limiting on
+        /api/auth/login at the time, that made the admin account trivially
+        reachable by anyone who loaded the page.
+
+        Seeded logins now live in COURSE_SETUP_GUIDE.md and are printed to the
+        terminal by `node seed.js`. Do not put them back in the markup.
+      -->
+      <div class="form-group"><label>Email Address</label><input type="email" id="email" class="form-control" placeholder="you@example.com" autocomplete="username"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="password" class="form-control" placeholder="Enter your password" autocomplete="current-password"></div>
+      <!--
+        REMOVED: the "Login As" role dropdown.
+
+        It served no functional purpose. The server never read it
+        (routes/auth.js destructures only { email, password }), and the redirect
+        below branches on the role the *server* returns. Its only effect was to
+        let a correct-credentials login fail because the user picked the wrong
+        item, and — much worse — to leak information. See the comment block on
+        doLogin() for the full explanation.
+
+        Your role is determined by your account, not by a dropdown.
+      -->
       <button class="btn btn-navy btn-full btn-lg" id="loginBtn" onclick="doLogin()">Login to Portal →</button>
       <p id="login-err" style="display:none;color:var(--danger);text-align:center;margin-top:.75rem;font-size:.83rem"></p>
       <p style="text-align:center;margin-top:1.5rem;font-size:.82rem;color:var(--text-light)"><a href="index.html">← Back to Homepage</a></p>
     </div>
   </div>
 </div>
+<script src="js/validation.js"></script>
 <script src="js/app.js"></script>
 <script>
-async function doLogin(){
-  const email=document.getElementById('email').value.trim().toLowerCase();
-  const pass=document.getElementById('password').value;
-  const role=document.getElementById('role').value;
-  const btn=document.getElementById('loginBtn');
-  const err=document.getElementById('login-err');
-  err.style.display='none'; btn.textContent='Logging in…'; btn.disabled=true;
+/*
+  WHY THE ROLE DROPDOWN IS GONE
+  ─────────────────────────────
+  The old version of this function did:
+
+      const role = document.getElementById('role').value;
+      const data = await apiFetch('/auth/login', {...});     // <- succeeds
+      if (role && data.user.role !== role) {
+        throw new Error('That account is not a ' + role + '.');
+      }
+
+  That check only ran AFTER the server had already confirmed the email and
+  password were correct. So the message was, in effect, "your password is
+  right, but you picked the wrong role" — a free confirmation that a guessed
+  password was valid. Try 'student', get told no; try 'teacher', get told no;
+  it's an admin. Three roles, so at most three clicks to identify any account.
+
+  Worse, the server had already minted a real JWT and put it in the response
+  body by that point. Skipping saveSession() only kept it out of localStorage;
+  the token was still sitting in the network tab, ready to be used against the
+  API directly. The dropdown blocked a redirect, not access.
+
+  The fix is structural, not cosmetic: there is no role input any more. The
+  server decides the role, the client only reads it to pick a landing page, and
+  every failure — unknown email, wrong password, rate limited — produces the
+  same message. Do not reintroduce a role selector here.
+*/
+
+// Guards against the button being re-entered while a request is in flight
+// (double-click, or Enter held down). Without this, one impatient user could
+// fire several login requests and burn through the server's rate limit.
+let loginInFlight = false;
+
+function showLoginError(msg) {
+  const err = document.getElementById('login-err');
+  err.style.display = 'block';
+  err.textContent = '❌ ' + msg;
+}
+
+async function doLogin() {
+  if (loginInFlight) return;
+
+  const emailEl = document.getElementById('email');
+  const passEl  = document.getElementById('password');
+  const btn     = document.getElementById('loginBtn');
+  const err     = document.getElementById('login-err');
+
+  const email = emailEl.value.trim().toLowerCase();
+  const pass  = passEl.value;
+
+  err.style.display = 'none';
+
+  // Client-side checks are for the user's benefit only — to save a round trip
+  // and give an instant, specific message. The server repeats all of them,
+  // because anything checked only in the browser isn't checked at all.
+  if (!email || !pass) {
+    showLoginError('Enter both your email and your password.');
+    (!email ? emailEl : passEl).focus();
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+    showLoginError("That doesn't look like a valid email address.");
+    emailEl.focus();
+    return;
+  }
+
+  loginInFlight = true;
+  btn.textContent = 'Logging in…';
+  btn.disabled = true;
 
   try {
     const data = await apiFetch('/auth/login', {
@@ -67,26 +141,49 @@ async function doLogin(){
       body: JSON.stringify({ email, password: pass }),
     });
 
-    // Optional: catch a role-mismatch here too, since the dropdown is still
-    // asking the user which role they expect to log in as.
-    if (role && data.user.role !== role) {
-      throw new Error('That account is not a ' + role + '.');
-    }
-
     saveSession(data.token, data.user);
 
-    if (data.user.role === 'student') window.location.href = 'Student/dashboard.html';
-    else if (data.user.role === 'teacher') window.location.href = 'Teacher/dashboard.html';
-    else window.location.href = 'Admin/index.html';
+    // The server's role is the only role. No cross-check against user input,
+    // because there is no user input to cross-check against.
+    const homes = {
+      student: 'Student/dashboard.html',
+      teacher: 'Teacher/dashboard.html',
+      // Admin/index.html is the retired SPA shell — go straight to the real page.
+      admin:   'Admin/dashboard.html',
+    };
+    const dest = homes[data.user.role];
+
+    if (!dest) {
+      // An account with a role the frontend has no pages for. Don't leave a
+      // half-logged-in session lying around.
+      clearSession();
+      showLoginError('This account has no portal assigned. Please contact your administrator.');
+      return;
+    }
+    window.location.href = dest;
 
   } catch (e) {
+    // apiFetch surfaces the server's message, which is already deliberately
+    // generic for auth failures ('Invalid email or password.'). Rate-limit
+    // (429) messages come through here too and are safe to show.
+    showLoginError(e.message || 'Invalid email or password.');
+  } finally {
+    // Reset even on the success path: if the redirect is slow, the button
+    // shouldn't be stuck reading "Logging in…" forever.
+    loginInFlight = false;
     btn.textContent = 'Login to Portal →';
     btn.disabled = false;
-    err.style.display = 'block';
-    err.textContent = '❌ ' + (e.message || 'Wrong credentials or role.');
   }
 }
-document.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+// Enter submits, but only from inside the two inputs. The old version bound
+// keydown on `document`, so Enter anywhere on the page — including on the
+// disabled button or the "Back to Homepage" link — re-fired doLogin().
+['email', 'password'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doLogin(); }
+  });
+});
 </script>
 
 

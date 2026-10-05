@@ -217,6 +217,72 @@ h1, h2, h3, h4, h5 {
 .form-control::placeholder { color: var(--text-light); }
 textarea.form-control { resize: vertical; min-height: 90px; }
 
+/* ─── Inline validation feedback ──────────────────────────────────────────
+   A toast that says "invalid input" makes the user hunt for the field that
+   caused it. These two classes put the reason directly under the offending
+   input instead. Applied by setFieldError()/applyFieldErrors() in app.js.   */
+
+.form-control.is-invalid {
+  border-color: var(--red, #C0392B);
+  background: #fff8f7;
+}
+.form-control.is-invalid:focus {
+  border-color: var(--red, #C0392B);
+  box-shadow: 0 0 0 3px rgba(192,57,43,0.12);
+}
+
+.field-error {
+  color: var(--red, #C0392B);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  margin-top: 0.3rem;
+  display: block;
+}
+
+/* A required field marker, so the user knows before submitting rather than
+   after. Put class="req" on the <label>. */
+.form-group label.req::after {
+  content: ' *';
+  color: var(--red, #C0392B);
+  font-weight: 700;
+}
+
+/* Short helper text under an input — used for format hints like the phone
+   pattern, which is the single most common thing people type wrongly. */
+.field-hint {
+  color: var(--text-light);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+/* Container for a multi-select rendered as checkboxes (teacher subjects). */
+.checkbox-grid {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.55rem 0.2rem;
+  background: var(--bg-soft, #f7f8fa);
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+/* Group heading inside a long modal. The student and teacher forms now capture
+   enough fields that one flat column of inputs is hard to scan; these split
+   them into Identity / Academic / Contact / Fees sections. */
+.form-section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-light);
+  margin: 1.1rem 0 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+.form-section-label:first-of-type { margin-top: 0.25rem; }
+
 
 /* ─── Cards ─────────────────────────────────── */
 

@@ -40,20 +40,23 @@
     <nav class="sidebar-nav">
       <div class="nav-label">Overview</div>
       <a href="dashboard.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">D</span>Dashboard
+        <span class="nav-icon">⊞</span>Dashboard
       </a>
       <div class="nav-label">Management</div>
       <a href="students.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">S</span>Students
+        <span class="nav-icon">◎</span>Students
       </a>
       <a href="teachers.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">T</span>Teachers
+        <span class="nav-icon">◈</span>Teachers
+      </a>
+      <a href="courses.html" class="nav-item">
+        <span class="nav-icon">▤</span>Courses
       </a>
       <a href="batches.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">B</span>Batches
+        <span class="nav-icon">▦</span>Batches
       </a>
       <a href="tests.html" class="nav-item">
-        <span class="nav-icon" style="font-family:var(--font-mono);font-weight:700">E</span>Entry Tests
+        <span class="nav-icon">◫</span>Entry Tests
       </a>
       <div class="nav-label">Account</div>
       <a href="../login.html" class="nav-item logout" id="logout-btn">
@@ -106,9 +109,9 @@
             <thead>
               <tr>
                 <th>Teacher</th>
-                <th>Subject</th>
+                <th>Subjects</th>
                 <th>Phone</th>
-                <th>Courses</th>
+                <th>Qualification &amp; Courses</th>
                 <th>Status</th>
                 <th>Joined</th>
                 <th>Actions</th>
@@ -124,175 +127,108 @@
 
 <!-- Add/Edit Teacher Modal -->
 <div class="modal-overlay" id="admin-teacher-modal" style="display:none">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:640px">
     <div class="modal-header">
       <h3 id="atm-modal-title">Add Teacher</h3>
       <button class="modal-close" onclick="closeAdminTeacherModal()">&#215;</button>
     </div>
     <input type="hidden" id="atm-id">
+
+    <div class="form-section-label">Identity</div>
     <div class="grid-2">
       <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" class="form-control" id="atm-name" placeholder="Teacher full name">
+        <label class="req">Full Name</label>
+        <input type="text" class="form-control" id="atm-name" placeholder="Ayesha Noor" maxlength="60">
       </div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" class="form-control" id="atm-email" placeholder="teacher@mindroute.pk">
+        <label class="req">Email</label>
+        <input type="email" class="form-control" id="atm-email" placeholder="ayesha@mindroute.pk" maxlength="120">
+        <span class="field-hint">Doubles as the login username.</span>
       </div>
       <div class="form-group">
-        <label>Phone</label>
-        <input type="text" class="form-control" id="atm-phone" placeholder="0300-0000000">
+        <label class="req">Phone</label>
+        <input type="tel" class="form-control" id="atm-phone" placeholder="0300-1234567" inputmode="tel">
+        <span class="field-hint">Pakistani mobile — 03XX-XXXXXXX or +923XXXXXXXXX.</span>
       </div>
       <div class="form-group">
-        <label>Subject</label>
-        <input type="text" class="form-control" id="atm-subject" placeholder="Biology, Physics...">
+        <label class="req">CNIC</label>
+        <input type="text" class="form-control" id="atm-cnic" placeholder="35202-1234567-1" inputmode="numeric">
+        <span class="field-hint">13 digits; dashes optional.</span>
+      </div>
+      <div class="form-group">
+        <label class="req">Gender</label>
+        <select class="form-control" id="atm-gender"></select>
+      </div>
+      <div class="form-group">
+        <label>Date of Birth</label>
+        <input type="date" class="form-control" id="atm-dob">
+        <span class="field-hint">Must be 18–80 years old.</span>
+      </div>
+    </div>
+
+    <div class="form-section-label">Teaching</div>
+    <!-- Subjects: a checkbox list built from the Subject collection, NOT a text
+         box. A typo here ("Bio", "biology") used to break the exact-match chain
+         Subject -> Course.subject -> Batch.subjectTeachers, and the only symptom
+         was the course quietly never appearing for anyone. -->
+    <div class="form-group">
+      <label class="req">Subjects Taught</label>
+      <div class="checkbox-grid" id="atm-subjects"></div>
+      <span class="field-hint">Pick at least one. Only these subjects can be assigned to this teacher in a batch.</span>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="req">Highest Qualification</label>
+        <select class="form-control" id="atm-qualification"></select>
+      </div>
+      <div class="form-group">
+        <label class="req">Years of Experience</label>
+        <input type="number" class="form-control" id="atm-experience" placeholder="5" min="0" max="60" step="1">
+      </div>
+      <div class="form-group">
+        <label>Specialization</label>
+        <input type="text" class="form-control" id="atm-specialization" placeholder="Cell Biology, Genetics" maxlength="100">
       </div>
       <div class="form-group">
         <label>Status</label>
-        <select class="form-control" id="atm-status">
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
+        <select class="form-control" id="atm-status"></select>
+        <span class="field-hint">Inactive teachers stay on file but aren't offered for new assignments.</span>
       </div>
     </div>
-    <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
+
+    <div class="form-section-label">Contact</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label>City</label>
+        <input type="text" class="form-control" id="atm-city" placeholder="Lahore" maxlength="40">
+      </div>
+      <div class="form-group">
+        <label>Address</label>
+        <input type="text" class="form-control" id="atm-address" placeholder="House 12, Street 4, Gulberg" maxlength="200">
+      </div>
+    </div>
+
+    <!-- Only shown when adding: an existing teacher's password is never read
+         back from the server (the schema has select:false on it), so there is
+         nothing to prefill and nothing to accidentally overwrite. -->
+    <div id="atm-password-wrap">
+      <div class="form-section-label">Login</div>
+      <div class="form-group">
+        <label>Temporary Password</label>
+        <input type="text" class="form-control" id="atm-password" placeholder="Leave blank to auto-generate" maxlength="72" autocomplete="off">
+        <span class="field-hint">Minimum 6 characters. If blank, one is generated and shown to you once.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:1rem">
       <button class="btn btn-ghost btn-sm" onclick="closeAdminTeacherModal()">Cancel</button>
       <button class="btn btn-danger btn-sm" id="atm-delete-btn" onclick="deleteCurrentTeacher()" style="display:none">Delete</button>
-      <button class="btn btn-primary btn-sm" onclick="saveAdminTeacher()">Save</button>
+      <button class="btn btn-primary btn-sm" id="atm-save-btn" onclick="saveAdminTeacher()">Save</button>
     </div>
   </div>
 </div>
 
+<script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
-<!-- <script>
-// let TEACHERS_DB = JSON.parse(localStorage.getItem('mr_teachers_db') || 'null') || [
-//   { id:'T001', name:'Ms. Ayesha Noor',  email:'teacher@mindroute.pk', phone:'0300-1111111', subject:'Biology',   status:'active',   courseIds:[1], joinDate:'Aug 1, 2024' },
-//   { id:'T002', name:'Dr. Kamran Baig',  email:'kamran@mindroute.pk',  phone:'0321-2222222', subject:'Physics',   status:'active',   courseIds:[2], joinDate:'Aug 1, 2024' },
-//   { id:'T003', name:'Mr. Tariq Mahmood',email:'tariq@mindroute.pk',   phone:'0333-3333333', subject:'Chemistry', status:'active',   courseIds:[3], joinDate:'Aug 5, 2024' },
-//   { id:'T004', name:'Ms. Hira Zuberi',  email:'hira@mindroute.pk',    phone:'0345-4444444', subject:'English',   status:'inactive', courseIds:[], joinDate:'Sep 1, 2024' },
-// ];
-// let BATCHES = JSON.parse(localStorage.getItem('mr_batches') || 'null') || [];
-// function saveTeachersDB() { localStorage.setItem('mr_teachers_db', JSON.stringify(TEACHERS_DB)); }
-// function saveBatches()    { localStorage.setItem('mr_batches',      JSON.stringify(BATCHES)); }
-
-function renderAdminTeachers() {
-  // Stats
-  const statsEl = document.getElementById('teacher-stats-row');
-  if (statsEl) {
-    const active   = TEACHERS_DB.filter(t => t.status === 'active').length;
-    const inactive = TEACHERS_DB.filter(t => t.status === 'inactive').length;
-    const totalCourses = TEACHERS_DB.reduce((a, t) => a + t.courseIds.length, 0);
-    statsEl.innerHTML = `
-      <div class="stat-card"><div class="stat-icon si-navy" style="font-family:var(--font-mono);font-weight:700">T</div><div class="stat-info"><div class="sv">${TEACHERS_DB.length}</div><div class="sl">Total Teachers</div></div></div>
-      <div class="stat-card"><div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">A</div><div class="stat-info"><div class="sv">${active}</div><div class="sl">Active</div></div></div>
-      <div class="stat-card"><div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">I</div><div class="stat-info"><div class="sv">${inactive}</div><div class="sl">Inactive</div></div></div>
-      <div class="stat-card"><div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">C</div><div class="stat-info"><div class="sv">${totalCourses}</div><div class="sl">Total Courses</div></div></div>`;
-  }
-
-  const tbody  = document.getElementById('admin-teachers-tbody');
-  const search = (document.getElementById('teacher-search')?.value || '').toLowerCase();
-  if (!tbody) return;
-
-  let teachers = TEACHERS_DB;
-  if (search) teachers = teachers.filter(t => t.name.toLowerCase().includes(search) || t.subject.toLowerCase().includes(search) || t.email.toLowerCase().includes(search));
-
-  tbody.innerHTML = '';
-  if (!teachers.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-light);padding:2rem;font-size:0.82rem">No teachers found.</td></tr>';
-    return;
-  }
-
-  teachers.forEach(t => {
-    const courseNames = t.courseIds.map(cid => COURSES[cid]?.subject || '?').join(', ') || '—';
-    tbody.innerHTML += `<tr>
-      <td>
-        <div style="font-weight:600">${t.name}</div>
-        <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${t.email}</div>
-      </td>
-      <td>${t.subject}</td>
-      <td style="font-family:var(--font-mono);font-size:0.76rem">${t.phone}</td>
-      <td style="font-size:0.78rem;color:var(--text-mid)">${courseNames}</td>
-      <td><span class="badge ${t.status==='active'?'badge-green':'badge-orange'}">${t.status}</span></td>
-      <td style="font-family:var(--font-mono);font-size:0.76rem">${t.joinDate}</td>
-      <td>
-        <button class="btn btn-ghost btn-sm" onclick="openAdminTeacherModal('${t.id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteTeacher('${t.id}')">Remove</button>
-      </td>
-    </tr>`;
-  });
-}
-
-function openAdminTeacherModal(tid) {
-  const titleEl = document.getElementById('atm-modal-title');
-  const delBtn  = document.getElementById('atm-delete-btn');
-
-  if (tid) {
-    const t = TEACHERS_DB.find(x => x.id === tid);
-    if (!t) return;
-    titleEl.textContent = 'Edit Teacher';
-    delBtn.style.display = 'inline-flex';
-    document.getElementById('atm-id').value      = t.id;
-    document.getElementById('atm-name').value    = t.name;
-    document.getElementById('atm-email').value   = t.email;
-    document.getElementById('atm-phone').value   = t.phone;
-    document.getElementById('atm-subject').value = t.subject;
-    document.getElementById('atm-status').value  = t.status;
-  } else {
-    titleEl.textContent = 'Add Teacher';
-    delBtn.style.display = 'none';
-    ['atm-id','atm-name','atm-email','atm-phone','atm-subject'].forEach(id => document.getElementById(id).value = '');
-    document.getElementById('atm-status').value = 'active';
-  }
-  document.getElementById('admin-teacher-modal').style.display = 'flex';
-}
-
-function closeAdminTeacherModal() {
-  document.getElementById('admin-teacher-modal').style.display = 'none';
-}
-
-function saveAdminTeacher() {
-  const id      = document.getElementById('atm-id').value;
-  const name    = document.getElementById('atm-name').value.trim();
-  const email   = document.getElementById('atm-email').value.trim();
-  const phone   = document.getElementById('atm-phone').value.trim();
-  const subject = document.getElementById('atm-subject').value.trim();
-  const status  = document.getElementById('atm-status').value;
-
-  if (!name || !email) { showToast('Name and email are required.'); return; }
-
-  if (id) {
-    const idx = TEACHERS_DB.findIndex(t => t.id === id);
-    if (idx !== -1) TEACHERS_DB[idx] = { ...TEACHERS_DB[idx], name, email, phone, subject, status };
-  } else {
-    const newId = 'T' + String(TEACHERS_DB.length + 1).padStart(3, '0');
-    TEACHERS_DB.push({
-      id: newId, name, email, phone, subject, status, courseIds: [],
-      joinDate: new Date().toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}),
-    });
-  }
-
-  saveTeachersDB();
-  closeAdminTeacherModal();
-  renderAdminTeachers();
-  showToast(id ? 'Teacher updated.' : 'Teacher added.');
-}
-
-function deleteCurrentTeacher() {
-  const id = document.getElementById('atm-id').value;
-  if (id) deleteTeacher(id);
-}
-
-function deleteTeacher(tid) {
-  if (!confirm('Remove this teacher?')) return;
-  const idx = TEACHERS_DB.findIndex(t => t.id === tid);
-  if (idx !== -1) TEACHERS_DB.splice(idx, 1);
-  saveTeachersDB();
-  closeAdminTeacherModal();
-  renderAdminTeachers();
-  showToast('Teacher removed.');
-}
-
-document.addEventListener('DOMContentLoaded', renderAdminTeachers);
-</script> -->
 </body>
 </html>
