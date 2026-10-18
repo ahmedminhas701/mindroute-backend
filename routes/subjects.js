@@ -20,14 +20,14 @@ router.use(protect);
 //           -> Student.enrolledCourseIds
 //
 // Every one of those links is matched by exact, case-sensitive string equality.
-// Break any link and the affected course simply stops appearing — for the
-// student, for the teacher, or both — with no error logged anywhere. That's why
+// Break any link and the affected course simply stops appearing - for the
+// student, for the teacher, or both - with no error logged anywhere. That's why
 // the UI now offers a dropdown fed from this endpoint instead of a text box, and
 // why creating a subject is the FIRST thing an admin needs to be able to do.
 //
 // Before this rewrite there was no UI calling POST or DELETE here at all: the
 // only subjects that could ever exist were the ones hard-coded in seed.js. That
-// is precisely the pressure that kept free-text subject inputs alive — if the
+// is precisely the pressure that kept free-text subject inputs alive - if the
 // dropdown can't be added to, people need a way around it.
 
 /**
@@ -74,7 +74,7 @@ async function findUsage(name) {
   };
 }
 
-// GET /api/subjects — read by every role: the teacher form, the batch form, the
+// GET /api/subjects - read by every role: the teacher form, the batch form, the
 // entry-test form and the course form all build their <select> from this.
 router.get('/', async (req, res) => {
   try {
@@ -93,14 +93,14 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/subjects — admin adds a new offered subject.
+// POST /api/subjects - admin adds a new offered subject.
 router.post('/', restrictTo('admin'), async (req, res) => {
   try {
     const norm = normalizeSubjectName(req.body.name);
     if (!norm.ok) return res.status(400).json({ message: norm.error, errors: { name: norm.error } });
 
     // Catch a case-variant duplicate before the unique index does. The index is
-    // case-SENSITIVE, so it would happily accept 'biology' alongside 'Biology' —
+    // case-SENSITIVE, so it would happily accept 'biology' alongside 'Biology' -
     // exactly the split-world problem this route exists to prevent. Normalising
     // makes that rare, but an existing lowercase row from older data would
     // still slip through without this check.
@@ -122,7 +122,7 @@ router.post('/', restrictTo('admin'), async (req, res) => {
   }
 });
 
-// PATCH /api/subjects/:id — rename, cascading the new name everywhere.
+// PATCH /api/subjects/:id - rename, cascading the new name everywhere.
 //
 // Without the cascade a rename is a data-corruption button: the Subject row says
 // 'Physics II' while every course, teacher and batch still says 'Physics 2', and
@@ -155,7 +155,7 @@ router.patch('/:id', restrictTo('admin'), async (req, res) => {
       EntryTest.updateMany({ subjects: oldName }, { $set: { 'subjects.$[el]': norm.name } }, { arrayFilters: [{ el: oldName }] }),
     ]);
 
-    // subjectTeachers is a Map, so the key itself has to be rewritten — there's
+    // subjectTeachers is a Map, so the key itself has to be rewritten - there's
     // no $rename for a dynamic map key, hence the read-modify-write.
     const batches = await Batch.find({ [`subjectTeachers.${oldName}`]: { $exists: true } });
     for (const b of batches) {
@@ -197,6 +197,12 @@ router.delete('/:id', restrictTo('admin'), async (req, res) => {
     }
 
     const usage = await findUsage(subject.name);
+    if (usage.courses.length) {
+      return res.status(409).json({
+        message: `"${subject.name}" still has ${usage.courses.length} course(s): ${usage.courses.join(', ')}. Delete those courses first.`,
+        usage,
+      });
+    }
     if (usage.total > 0 && req.query.force !== 'true') {
       const parts = [];
       if (usage.courses.length)    parts.push(`${usage.courses.length} course(s): ${usage.courses.join(', ')}`);
@@ -205,7 +211,7 @@ router.delete('/:id', restrictTo('admin'), async (req, res) => {
       if (usage.batches.length)    parts.push(`${usage.batches.length} batch(es): ${usage.batches.join(', ')}`);
       return res.status(409).json({
         message: `"${subject.name}" is still in use by ${parts.join('; ')}. ` +
-                 `Delete or reassign those first — removing the subject now would make those courses stop appearing for students and teachers.`,
+                 `Delete or reassign those first - removing the subject now would make those courses stop appearing for students and teachers.`,
         usage,
       });
     }

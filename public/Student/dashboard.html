@@ -4,7 +4,7 @@
   <style>html,body{background:#f7f8fa!important}</style>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Dashboard — Mind Route</title>
+  <title>Dashboard - Mind Route</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
@@ -86,14 +86,14 @@
         <div class="stat-card">
           <div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">A</div>
           <div class="stat-info">
-            <div class="sv" id="stat-att">—</div>
+            <div class="sv" id="stat-att">-</div>
             <div class="sl">Attendance</div>
           </div>
         </div>
         <div class="stat-card">
           <div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">F</div>
           <div class="stat-info">
-            <div class="sv" id="stat-fee" style="font-size:.95rem;line-height:1.2">—</div>
+            <div class="sv" id="stat-fee" style="font-size:.95rem;line-height:1.2">-</div>
             <div class="sl">Fee Status</div>
           </div>
         </div>
@@ -183,22 +183,6 @@
 
 <script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  const s = getActiveStudent();
-  const initials = s.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
-  const av = document.getElementById('sb-avatar');
-  if (av) av.textContent = initials;
-  setText('sb-name', s.name.split(' ')[0]);
-  setText('topbar-roll', s.rollNo);
-  setText('topbar-test', s.entryTest + ' Batch');
-  setText('stat-courses', s.enrolledCourseIds.length);
-  const op = overallProgress();
-  setText('stat-progress', op + '%');
-  setText('stat-progress-2', op + '%');
-  const bar = document.getElementById('overall-prog-bar');
-  if (bar) bar.style.width = op + '%';
-});
-</script>
+
 </body>
 </html>

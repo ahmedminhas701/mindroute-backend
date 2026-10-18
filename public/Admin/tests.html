@@ -4,7 +4,7 @@
   <style>html,body{background:#f7f8fa!important}</style>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Entry Tests — Mind Route Admin</title>
+  <title>Entry Tests - Mind Route Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
@@ -72,7 +72,7 @@
       <div class="topbar-right">
         <div class="notif-bell-wrap" id="notif-bell-wrap">
           <div class="notif-bell" id="notif-bell">
-            <span style="font-size:0.85rem">&#x1F514;</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <div class="notif-count" id="notif-count" style="display:none">0</div>
           </div>
           <div class="notif-dropdown" id="notif-dropdown">
@@ -93,13 +93,13 @@
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════════
-           Subjects — the master list
+           Subjects - the master list
 
            This card is new, and it is the reason the free-text subject inputs
            could finally be removed everywhere else. Before it existed the only
            subjects that could ever exist were the ones hard-coded in seed.js,
            so anyone who needed a subject that wasn't seeded had no option but
-           to type it into a text box — which is exactly how "Bio" / "biology"
+           to type it into a text box - which is exactly how "Bio" / "biology"
            / "Biology " got into the data and quietly broke the exact-match
            chain Subject -> EntryTest.subjects -> Course.subject ->
            Batch.subjectTeachers. A dropdown is only safe to enforce once
@@ -108,7 +108,7 @@
       <div class="card" id="admin-subjects-card" style="margin-bottom:1.5rem">
         <div class="card-title">
           Subjects
-          <span style="font-weight:400;color:var(--text-light);font-size:0.72rem">— every subject dropdown in the app reads from this list</span>
+          <span style="font-weight:400;color:var(--text-light);font-size:0.72rem">- every subject dropdown in the app reads from this list</span>
         </div>
         <div style="display:flex;gap:0.6rem;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap">
           <div style="flex:1;min-width:220px">
@@ -159,11 +159,11 @@
                  nothing ever populated it, so addSubjectToNewTest() could never
                  add anything and "Add Entry Test" failed 100% of the time (the
                  server rejects a test with an empty subject list). Populating it
-                 in the markup isn't an option either — SUBJECTS_DB is filled by
+                 in the markup isn't an option either - SUBJECTS_DB is filled by
                  an async fetch that hasn't resolved when the HTML is parsed. -->
             <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem">
               <select class="form-control" id="new-test-subject-inp" style="flex:1" onchange="addSubjectToNewTest()">
-                <option value="">— Choose subject —</option>
+                <option value="">- Choose subject -</option>
               </select>
               <button class="btn btn-outline btn-sm" onclick="addSubjectToNewTest()">Add</button>
             </div>
@@ -215,7 +215,11 @@
      Two copies of the same state is how this page's subject list got out of
      step with what was actually submitted. -->
 
+
+
 <script src="../js/validation.js"></script>
 <script src="../js/app.js"></script>
 </body>
 </html>
+
+

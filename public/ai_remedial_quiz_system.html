@@ -64,7 +64,7 @@
     <div class="sub">Your overall quiz average is below 60%. Here's what needs attention:</div>
     <div id="notif-topics"></div>
     <div class="alert alert-warn" style="margin-top:8px">
-      The AI tutor will generate a new quiz for each weak topic — questions are different from your previous attempts.
+      The AI tutor will generate a new quiz for each weak topic - questions are different from your previous attempts.
     </div>
     <div class="btn-row">
       <button onclick="startAIQuiz()">Start AI quiz session</button>
@@ -155,7 +155,7 @@ function showScreen(id){
 function renderOverview(){
   const op=state.overallPct;
   const sub=document.getElementById('ov-sub');
-  sub.textContent='Overall quiz average: '+op+'% — '+
+  sub.textContent='Overall quiz average: '+op+'% - '+
     (op<60?'Below passing threshold (60%)':op<75?'Above threshold but keep improving':'Good standing');
   
   const subj={};
@@ -190,8 +190,8 @@ function renderOverview(){
       const attLeft=3-att;
       whtml+=`<div class="topic-row">
         <div style="flex:1">
-          <div style="font-size:14px;color:var(--color-text-primary)">${q.topic}</div>
-          <div style="font-size:12px;color:var(--color-text-secondary)">${q.subject} · ${p}% scored · ${attLeft} AI attempt${attLeft!==1?'s':''} left</div>
+          <div style="font-size:14px;color:var(--color-text-primary)">${esc(q.topic)}</div>
+          <div style="font-size:12px;color:var(--color-text-secondary)">${esc(q.subject)} · ${p}% scored · ${attLeft} AI attempt${attLeft!==1?'s':''} left</div>
         </div>
         <span class="badge badge-danger">${p}%</span>
       </div>`;
@@ -200,7 +200,7 @@ function renderOverview(){
     weakEl.innerHTML=whtml;
     actionsEl.innerHTML=`<button onclick="showNotification()">Use AI tutor</button>`;
   } else {
-    alertEl.innerHTML=`<div class="alert alert-success">Your overall quiz average is ${op}% — above the 60% threshold. Keep it up!</div>`;
+    alertEl.innerHTML=`<div class="alert alert-success">Your overall quiz average is ${op}% - above the 60% threshold. Keep it up!</div>`;
     weakEl.innerHTML='';
     actionsEl.innerHTML='';
   }
@@ -212,7 +212,7 @@ function showNotification(){
   state.weakTopics.forEach(q=>{
     const p=Math.round(q.score/q.total*100);
     html+=`<div class="topic-row">
-      <span style="font-size:14px;color:var(--color-text-primary);flex:1">${q.topic} <span class="badge badge-info">${q.subject}</span></span>
+      <span style="font-size:14px;color:var(--color-text-primary);flex:1">${esc(q.topic)} <span class="badge badge-info">${esc(q.subject)}</span></span>
       <span class="badge badge-danger">${p}%</span>
     </div>`;
   });
@@ -243,7 +243,7 @@ async function generateQuestions(topic){
   try{
     const prompt=`You are a quiz generator for a Pakistani entry test prep LMS (MDCAT/ECAT students).
 Generate exactly 3 MCQ questions about "${topic.topic}" (subject: ${topic.subject}).
-Each question must be DIFFERENT from typical textbook questions — test application and understanding.
+Each question must be DIFFERENT from typical textbook questions - test application and understanding.
 Respond ONLY with a JSON array, no markdown, no preamble:
 [
   {"q":"question text","opts":["A","B","C","D"],"ans":0},
@@ -270,14 +270,14 @@ ans is the 0-based index of the correct option.`;
 
 function fallbackQuestions(topic){
   return [
-    {q:`Which of the following best describes a key concept in ${topic}?`,opts:['Option A — Primary process','Option B — Secondary pathway','Option C — Main mechanism','Option D — Supporting structure'],ans:2},
+    {q:`Which of the following best describes a key concept in ${topic}?`,opts:['Option A - Primary process','Option B - Secondary pathway','Option C - Main mechanism','Option D - Supporting structure'],ans:2},
     {q:`In the context of ${topic}, what happens when conditions change?`,opts:['Rate increases','Rate decreases','No change occurs','System resets'],ans:0},
     {q:`Which statement about ${topic} is most accurate?`,opts:['It is always active','It requires energy','It is passive','It occurs randomly'],ans:1}
   ];
 }
 
 function renderQuiz(topic,att){
-  document.getElementById('quiz-topic-label').textContent=topic.topic+' — '+topic.subject;
+  document.getElementById('quiz-topic-label').textContent=topic.topic+' - '+topic.subject;
   document.getElementById('quiz-attempts-label').textContent='Attempt '+(att+1)+' of 3';
   
   const dots=document.getElementById('quiz-dots');
@@ -332,7 +332,7 @@ function submitAIQuiz(){
   const resEl=document.getElementById('quiz-result');
   
   if(pct>=70){
-    resEl.innerHTML=`<div class="alert alert-success">Scored ${correct}/${total} (${pct}%) — great job! Moving to next topic.</div>`;
+    resEl.innerHTML=`<div class="alert alert-success">Scored ${correct}/${total} (${pct}%) - great job! Moving to next topic.</div>`;
     state.sessionScores.push({topic:topic.topic,pct,passed:true});
     setTimeout(()=>{state.currentTopicIdx++;loadTopicQuiz();},2000);
   } else if(attDone>=3){

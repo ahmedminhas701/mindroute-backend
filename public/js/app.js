@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════╗
-// ║  MIND ROUTE LMS — app.js                                     ║
+// ║  MIND ROUTE LMS - app.js                                     ║
 // ║  Single source of truth for all mock data + page logic.      ║
 // ║                                                                ║
 // ║  FILE MAP (search for these headers to jump around):         ║
@@ -76,7 +76,7 @@
 // This was a hard-coded 'http://localhost:3000/api'. That worked only as long
 // as two unrelated things stayed in step: this line, and PORT in .env. server.js
 // reads `process.env.PORT || 5000`, so deleting the PORT line from .env moves
-// the server to 5000 while every page keeps asking for 3000 — and the only
+// the server to 5000 while every page keeps asking for 3000 - and the only
 // symptom is that all data silently fails to load, on every page, with nothing
 // but a network error in the console to explain it.
 //
@@ -122,7 +122,7 @@ async function apiFetch(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-// ── Data globals — populated by loadAppData(), not hardcoded anymore ──
+// ── Data globals - populated by loadAppData(), not hardcoded anymore ──
 let ENTRY_TESTS = [];
 let TEACHERS_DB = [];
 let STUDENTS_DB = [];
@@ -142,7 +142,7 @@ async function loadAppData() {
 
 
 
-  // Everyone needs these — course catalog, entry tests, schedule, thresholds, notifications
+  // Everyone needs these - course catalog, entry tests, schedule, thresholds, notifications
   const [courseList, tests, schedule, thresholds, notifs, subjects] = await Promise.all([
     apiFetch('/courses'),
     apiFetch('/tests'),
@@ -160,7 +160,7 @@ async function loadAppData() {
   NOTIFICATIONS = notifs;
   SUBJECTS_DB = subjects;
 
-  // Batches + teacher directory — needed by student dashboard too (teacher-name lookup)
+  // Batches + teacher directory - needed by student dashboard too (teacher-name lookup)
   [BATCHES, TEACHERS_DB] = await Promise.all([
     apiFetch('/batches'),
     apiFetch('/teachers'),
@@ -182,7 +182,7 @@ async function loadAppData() {
 
 
 
-// Replaces the old TEACHERS_DB.find()/STUDENTS_DB.find() lookups —
+// Replaces the old TEACHERS_DB.find()/STUDENTS_DB.find() lookups -
 // these now just return the already-loaded current-user record.
 function getActiveStudent() { return CURRENT_STUDENT; }
 function getActiveTeacher() { return CURRENT_TEACHER; }
@@ -192,7 +192,7 @@ function getActiveTeacher() { return CURRENT_TEACHER; }
 //  SHARED UI HELPERS
 //
 //  Everything below is used by more than one page. They live here, above the
-//  page renderers, so there is exactly one implementation of each — the bug
+//  page renderers, so there is exactly one implementation of each - the bug
 //  class this project kept hitting was two copies of the same function (one
 //  in app.js, one in an inline <script>) drifting apart until the page ran
 //  the wrong one.
@@ -201,8 +201,8 @@ function getActiveTeacher() { return CURRENT_TEACHER; }
 // ── HTML escaping ────────────────────────────────────────────────────────
 //
 // Almost every list in this app is built with `innerHTML +=` and template
-// literals. That means any value that came from a form — a student's name, a
-// course title, a subject — is parsed as HTML. A name like
+// literals. That means any value that came from a form - a student's name, a
+// course title, a subject - is parsed as HTML. A name like
 //   Ali <img src=x onerror=alert(1)>
 // executes. Even without malice it breaks the page: a name containing & or <
 // silently mangles the row.
@@ -225,6 +225,35 @@ function escAttr(v) {
   return String(v === null || v === undefined ? '' : v).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+const HONORIFICS = /^(mr|mrs|ms|miss|dr|prof|sir|madam|engr)\.?$/i;
+function nameParts(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  const core = parts.filter(p => !HONORIFICS.test(p));
+  return core.length ? core : parts;
+}
+function firstName(name)  { return nameParts(name)[0] || ''; }
+function initialsOf(name) { return nameParts(name).map(w => w[0]).join('').slice(0, 2).toUpperCase(); }
+
+/** One date format everywhere: "30 Aug 2026". Accepts YYYY-MM-DD or any date string. */
+function fmtDate(v) {
+  if (!v) return '-';
+  const s = String(v);
+  const d = /^\d{4}-\d{2}-\d{2}/.test(s) ? new Date(s.slice(0, 10) + 'T00:00:00') : new Date(s);
+  return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** One fee-status colour mapping for every page. */
+function feeBadgeClass(status) {
+  return status === 'Paid' ? 'badge-green' : status === 'Partial' ? 'badge-orange' : 'badge-red';
+}
+
+/** Returns the URL only if it is a plain http(s) or same-site path, else ''. */
+function safeHref(u) {
+  const s = String(u == null ? '' : u).trim();
+  return /^(https?:\/\/[^\s"'<>`\\]+|\/(?!\/)[^\s"'<>`\\]*)$/i.test(s) ? s : '';
+}
+
+
 // ── Teacher reference resolution ─────────────────────────────────────────
 //
 // `Course.teacher` used to store a teacher's display NAME. The server now
@@ -233,7 +262,7 @@ function escAttr(v) {
 // teachers with the same name were indistinguishable.
 //
 // The display layer therefore can't print `c.teacher` raw any more. This
-// resolves either form — an id, or a legacy name — to the current display
+// resolves either form - an id, or a legacy name - to the current display
 // name, so a database that still holds old name-based values keeps rendering
 // correctly instead of showing 'T001' to students.
 function teacherLabel(ref) {
@@ -243,7 +272,7 @@ function teacherLabel(ref) {
   const byName = TEACHERS_DB.find(t => t.name === ref);
   if (byName) return byName.name;
   // Not in the directory: either a deleted teacher or a free-text legacy
-  // value. Show the raw value rather than 'undefined' — an admin seeing
+  // value. Show the raw value rather than 'undefined' - an admin seeing
   // 'T007' in the teacher column is a usable clue; 'undefined' is not.
   return String(ref);
 }
@@ -261,23 +290,23 @@ function teacherFromRef(ref) {
 // SUBJECTS_DB / TEACHERS_DB / ENTRY_TESTS, which are empty until the async
 // loadAppData() resolves. Code that populated a <select> during
 // DOMContentLoaded produced a permanently empty dropdown, which is exactly
-// why free-text subject inputs survived in this codebase — people needed a
+// why free-text subject inputs survived in this codebase - people needed a
 // way around a dropdown that never had anything in it.
 /**
  * @param {string} elId          id of the <select>
  * @param {Array}  items         strings, or objects
  * @param {object} opts
- *   value/label — key names when items are objects (default 'value'/'label')
- *   selected    — value to preselect
- *   placeholder — text for a leading empty option; pass null for none
- *   emptyText   — what to show when items is empty
+ *   value/label - key names when items are objects (default 'value'/'label')
+ *   selected    - value to preselect
+ *   placeholder - text for a leading empty option; pass null for none
+ *   emptyText   - what to show when items is empty
  */
 function populateSelect(elId, items, opts = {}) {
   const el = typeof elId === 'string' ? document.getElementById(elId) : elId;
   if (!el) return null;
   const {
     value = 'value', label = 'label', selected = '',
-    placeholder = '— Select —', emptyText = null,
+    placeholder = '- Select -', emptyText = null,
   } = opts;
 
   const list = Array.isArray(items) ? items : [];
@@ -295,7 +324,7 @@ function populateSelect(elId, items, opts = {}) {
     html += `<option value="${esc(v)}">${esc(l)}</option>`;
   });
   el.innerHTML = html;
-  // Assign after the options exist — setting .value first is a no-op because
+  // Assign after the options exist - setting .value first is a no-op because
   // a <select> silently rejects a value with no matching <option>.
   el.value = selected == null ? '' : String(selected);
   return el;
@@ -306,8 +335,8 @@ function populateSelect(elId, items, opts = {}) {
  *
  * SUBJECTS_DB holds raw Subject documents ({ _id, name, isCore }), but older
  * code paths sometimes handed it an array of bare strings. Rather than have
- * every caller re-derive the name defensively — which it was doing in three
- * separate places, and getting subtly different results — there is one reader.
+ * every caller re-derive the name defensively - which it was doing in three
+ * separate places, and getting subtly different results - there is one reader.
  */
 function subjectNames() {
   return (SUBJECTS_DB || [])
@@ -320,15 +349,15 @@ function subjectNames() {
 function populateSubjectSelect(elId, selected = '', opts = {}) {
   return populateSelect(elId, subjectNames(), {
     selected,
-    placeholder: opts.placeholder !== undefined ? opts.placeholder : '— Select subject —',
-    emptyText: 'No subjects yet — add one on the Entry Tests page',
+    placeholder: opts.placeholder !== undefined ? opts.placeholder : '- Select subject -',
+    emptyText: 'No subjects yet - add one on the Entry Tests page',
     ...opts,
   });
 }
 
 /**
  * Teacher dropdown. Option VALUES are teacher ids, because that is what the
- * server stores. `subject` narrows the list to teachers who actually teach it —
+ * server stores. `subject` narrows the list to teachers who actually teach it -
  * assigning a Chemistry teacher to a Biology course is rejected by the API, so
  * the form shouldn't offer it.
  */
@@ -346,11 +375,11 @@ function populateTeacherSelect(elId, selected = '', subject = '') {
   }
   const items = list.map(t => ({
     value: t.id,
-    label: t.subjects && t.subjects.length ? `${t.name} — ${t.subjects.join(', ')}` : t.name,
+    label: t.subjects && t.subjects.length ? `${t.name} - ${t.subjects.join(', ')}` : t.name,
   }));
   return populateSelect(elId, items, {
     selected: teacherFromRef(selected) ? teacherFromRef(selected).id : '',
-    placeholder: '— Unassigned —',
+    placeholder: '- Unassigned -',
     emptyText: subject ? `No active teacher teaches ${subject}` : 'No teachers yet',
   });
 }
@@ -426,7 +455,7 @@ function applyFieldErrors(errors, prefix, rootId) {
     const id = prefix ? `${prefix}-${field}` : field;
     if (!setFieldError(id, msg)) orphaned.push(msg);
   });
-  // Scroll the first bad field into view — in a long modal the error can
+  // Scroll the first bad field into view - in a long modal the error can
   // otherwise be below the fold and look like nothing happened.
   const firstBad = (rootId ? document.getElementById(rootId) : document)?.querySelector('.is-invalid');
   if (firstBad && firstBad.scrollIntoView) firstBad.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -437,7 +466,7 @@ function applyFieldErrors(errors, prefix, rootId) {
  * Validate a form client-side with the SAME rules the server uses, then paint
  * the failures inline. Returns the cleaned values, or null if anything failed.
  *
- * Client-side validation here is purely for fast, specific feedback — the
+ * Client-side validation here is purely for fast, specific feedback - the
  * server re-validates everything with this identical rule set, so a caller
  * bypassing the form gains nothing.
  */
@@ -529,7 +558,7 @@ function loginPagePath() {
  * The "is this the login page" check is filename-based, not element-based
  * (some login.html markups don't use a <form id="login-form">, e.g. a
  * plain div-based layout with a button calling a login function directly
- * — checking for that id would wrongly say "not the login page," causing
+ * - checking for that id would wrongly say "not the login page," causing
  * requireLogin() to redirect login.html to itself in an infinite loop).
  *
  * NOTE: this only checks "is someone logged in," not "is the right ROLE
@@ -572,7 +601,7 @@ function requireLogin() {
  * somewhere real instead of showing them a page that isn't theirs.
  */
 function roleHomePath(role) {
-  // Admin goes to the real multi-page dashboard.html, NOT Admin/index.html —
+  // Admin goes to the real multi-page dashboard.html, NOT Admin/index.html -
   // index.html is the retired hash-routing SPA shell (it now just redirects here).
   const homes = { student: 'Student/dashboard.html', teacher: 'Teacher/dashboard.html', admin: 'Admin/dashboard.html' };
   const inSubfolder = location.pathname.includes('/Student/') ||
@@ -609,7 +638,7 @@ function setTopicDone(topicId, val) {
     body: JSON.stringify({ done: val }),
   }).catch(err => {
     console.error('Failed to save progress:', err.message);
-    showToast('Could not save progress — check your connection.');
+    showToast('Could not save progress - check your connection.');
   });
 }
 
@@ -659,12 +688,38 @@ function calcGradeLetter(pct) {
 
 /** Overall quiz percentage across ALL of a student's quiz attempts (any course). */
 function studentQuizAvg(student) {
-  const scores = student.quizScores;
+  const scores = (student.quizScores || []).filter(q => !q.isAIRetry);
   if (!scores.length) return 0;
   const total = scores.reduce((a, b) => a + b.total, 0);
   const got   = scores.reduce((a, b) => a + b.score, 0);
   return total ? Math.round(got / total * 100) : 0;
 }
+
+function bindAutoHyphen(id, groups) {
+  const el = document.getElementById(id);
+  if (!el || el.dataset.hyphenBound) return;
+  el.dataset.hyphenBound = '1';
+  const total = groups.reduce((a, b) => a + b, 0);
+  el.addEventListener('input', e => {
+    if (/^(\+|92|0092)/.test(el.value)) return;
+    const deleting = !!(e.inputType && e.inputType.startsWith('delete'));
+    const digits = el.value.replace(/\D/g, '').slice(0, total);
+    let out = '', pos = 0;
+    groups.forEach((g, gi) => {
+      const part = digits.slice(pos, pos + g);
+      if (!part) return;
+      out += (gi ? '-' : '') + part;
+      pos += g;
+    });
+    let acc = 0;
+    for (let gi = 0; gi < groups.length - 1; gi++) {
+      acc += groups[gi];
+      if (digits.length === acc && !deleting) out += '-';
+    }
+    el.value = out;
+  });
+}
+
 
 /** Overall graded-assignment percentage, or null if nothing has been graded yet. */
 function studentAssignmentAvg(student) {
@@ -721,6 +776,7 @@ function getDeadlines() {
   const list = [];
   student.enrolledCourseIds.forEach(cid => {
     const c = COURSES[cid];
+    if (!c) return;
     c.weeks.forEach(w => w.topics.forEach(t => {
       if (t.dueDate) {
         const days = getDueDays(t.dueDate);
@@ -761,8 +817,8 @@ function renderNotifBell() {
       const item = document.createElement('div');
       item.className = 'notif-item' + (n.read ? '' : ' unread');
       item.innerHTML = `
-        <div class="notif-icon ${notifColors[n.type] || 'si-blue'}" style="font-size:0.7rem;font-family:var(--font-mono)">${n.type.slice(0, 2).toUpperCase()}</div>
-        <div class="notif-body" style="flex:1"><p><strong>${n.title}</strong> — ${n.body}</p><small>${timeAgo(n.createdAt)}</small></div>
+        <div class="notif-icon ${esc(notifColors[n.type] || 'si-blue')}" style="font-size:0.7rem;font-family:var(--font-mono)">${esc(String(n.type || '').slice(0, 2).toUpperCase())}</div>
+        <div class="notif-body" style="flex:1"><p><strong>${esc(n.title)}</strong>${n.body ? ' - ' + esc(n.body) : ''}</p><small>${esc(timeAgo(n.createdAt))}</small></div>
         ${!n.read ? '<div class="notif-dot"></div>' : ''}`;
       item.onclick = async () => {
         try {
@@ -797,8 +853,58 @@ document.addEventListener('click', e => {
 });
 
 // ──────────────────────────────────────────────────
-// 14. SIDEBAR SETUP (runs on every page — avatar initials, active nav link, logout)
+// 14. SIDEBAR SETUP (runs on every page - avatar initials, active nav link, logout)
 // ──────────────────────────────────────────────────
+function openChangePasswordModal() {
+  let m = document.getElementById('change-pw-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'change-pw-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(3px);padding:1rem';
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);padding:1.5rem;width:100%;max-width:400px;border:1px solid var(--border);box-shadow:var(--shadow-lg)">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:1rem">Change Password</h3>
+      <div class="form-group"><label>Current Password</label><input type="password" class="form-control" id="cpw-currentPassword" autocomplete="current-password"></div>
+      <div class="form-group"><label>New Password</label><input type="password" class="form-control" id="cpw-newPassword" autocomplete="new-password" maxlength="72"><span class="field-hint">8 to 72 characters.</span></div>
+      <div class="form-group"><label>Confirm New Password</label><input type="password" class="form-control" id="cpw-confirm" autocomplete="new-password" maxlength="72"></div>
+      <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:0.5rem">
+        <button class="btn btn-ghost btn-sm" onclick="closeChangePasswordModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="cpw-save" onclick="submitChangePassword()">Update Password</button>
+      </div>
+    </div>`;
+  m.style.display = 'flex';
+}
+function closeChangePasswordModal() {
+  const m = document.getElementById('change-pw-modal');
+  if (m) m.style.display = 'none';
+}
+async function submitChangePassword() {
+  clearFieldErrors('change-pw-modal');
+  const cur = fv('cpw-currentPassword'), nw = fv('cpw-newPassword'), cf = fv('cpw-confirm');
+  if (!cur) { setFieldError('cpw-currentPassword', 'Enter your current password.'); return; }
+  if (nw.length < 8) { setFieldError('cpw-newPassword', 'Use at least 8 characters.'); return; }
+  if (nw !== cf) { setFieldError('cpw-confirm', 'The two passwords do not match.'); return; }
+  const btn = document.getElementById('cpw-save');
+  if (btn) btn.disabled = true;
+  try {
+    await apiFetchDetailed('/auth/change-password', { method: 'POST', body: JSON.stringify({ currentPassword: cur, newPassword: nw }) });
+    closeChangePasswordModal();
+    showToast('Password updated.');
+  } catch (err) {
+    if (err.fieldErrors) {
+      const orphans = applyFieldErrors(err.fieldErrors, 'cpw', 'change-pw-modal');
+      if (orphans.length) showToast(orphans[0]);
+    } else {
+      showToast(err.message);
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+
 function setupSidebar() {
 
 
@@ -814,11 +920,13 @@ function setupSidebar() {
 
   const session = getSession();
   if (session) {
-    const initials = session.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    // const initials = session.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+    const initials = initialsOf(session.name);
     const av = document.getElementById('sb-avatar');
     const sn = document.getElementById('sb-name');
     if (av) av.textContent = initials;
-    if (sn) sn.textContent = session.name.split(' ')[0];
+    // if (sn) sn.textContent = session.name.split(' ')[0];
+    if (sn) sn.textContent = firstName(session.name);
   }
 
   const nb = document.getElementById('notif-nav-badge');
@@ -826,12 +934,20 @@ function setupSidebar() {
   if (nb) { nb.textContent = uc; nb.style.display = uc > 0 ? 'inline' : 'none'; }
 
   const logoutBtn = document.getElementById('logout-btn');
-  if (logoutBtn) logoutBtn.addEventListener('click', e => {
-    e.preventDefault();
-    clearSession();
-    window.location.href = loginPagePath();
-  });
-
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', e => {
+      e.preventDefault();
+      clearSession();
+      window.location.href = loginPagePath();
+    });
+    if (!document.getElementById('change-pw-link')) {
+      const a = document.createElement('a');
+      a.href = '#'; a.id = 'change-pw-link'; a.className = 'nav-item';
+      a.innerHTML = '<span class="nav-icon">&#9672;</span> Change Password';
+      a.addEventListener('click', e => { e.preventDefault(); openChangePasswordModal(); });
+      logoutBtn.parentNode.insertBefore(a, logoutBtn);
+    }
+  }
   renderNotifBell();
 }
 
@@ -898,7 +1014,7 @@ async function applyThresholds() {
     GRADE_THRESHOLDS = result.thresholds;          // only now, after it stuck
     STUDENTS_DB = await apiFetch('/students');     // refresh recomputed grades
     renderGrading();
-    showToast(`Thresholds updated — ${result.recomputedStudents} student(s) recomputed.`);
+    showToast(`Thresholds updated - ${result.recomputedStudents} student(s) recomputed.`);
   } catch (err) {
     showToast(err.message);
     renderGrading();                               // put the accepted values back on screen
@@ -925,6 +1041,84 @@ async function approveGrade(studentId, assignmentId) {
   }
 }
 
+/**
+ * Pressing Back from the dashboard would land on login.html while the user
+ * still holds a valid session. Instead, ask first; "Yes" really logs out.
+ * Entries: [..., dashboard(base), dashboard(top)]. Back from "top" lands on
+ * "base", which is where we intercept.
+ */
+function installBackLogoutGuard() {
+  const st = history.state || {};
+  if (!st.mrTop) {
+    if (!st.mrBase) history.replaceState({ mrBase: true }, '', location.href);
+    history.pushState({ mrTop: true }, '', location.href);
+  }
+  window.addEventListener('popstate', e => {
+    if (!e.state || !e.state.mrBase) return;
+    if (confirm('Going back will log you out of your account. Do you want to log out?')) {
+      clearSession();
+      window.location.replace(loginPagePath());
+    } else {
+      history.pushState({ mrTop: true }, '', location.href);
+    }
+  });
+}
+
+function showCredentials({ title, name, email, password }) {
+  let m = document.getElementById('credentials-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'credentials-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(3px);padding:1rem';
+    document.body.appendChild(m);
+  }
+  const loginUrl = location.origin + '/login.html';
+  m.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);padding:1.5rem;width:100%;max-width:440px;border:1px solid var(--border);box-shadow:var(--shadow-lg)">
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:0.25rem">${esc(title)}</h3>
+      <p style="font-size:0.8rem;color:var(--text-mid);margin-bottom:1rem;line-height:1.5">
+        Share these details with ${esc(name)}. The password is shown only now and cannot be viewed again; if it is lost, use Reset Password.
+      </p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.85rem 1rem;font-family:var(--font-mono);font-size:0.82rem;line-height:1.9;word-break:break-all">
+        <div>Page: ${esc(loginUrl)}</div>
+        <div>Email: ${esc(email)}</div>
+        <div>Password: <strong>${esc(password)}</strong></div>
+      </div>
+      <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:1rem">
+        <button class="btn btn-outline btn-sm" id="cred-copy-btn">Copy</button>
+        <button class="btn btn-primary btn-sm" onclick="document.getElementById('credentials-modal').style.display='none'">Done</button>
+      </div>
+    </div>`;
+  m.style.display = 'flex';
+  document.getElementById('cred-copy-btn').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(`Mind Route login\nPage: ${loginUrl}\nEmail: ${email}\nPassword: ${password}`);
+      showToast('Copied.');
+    } catch (e) { showToast('Could not copy. Select the text and copy it manually.'); }
+  };
+}
+
+async function resetCurrentTeacherPassword() {
+  const id = fv('atm-id'); if (!id) return;
+  const t = TEACHERS_DB.find(x => x.id === id);
+  if (!confirm(`Reset the password for ${t ? t.name : 'this teacher'}? Their current password will stop working.`)) return;
+  try {
+    const r = await apiFetchDetailed(`/teachers/${encodeURIComponent(id)}/reset-password`, { method: 'POST' });
+    showCredentials({ title: 'Password reset', name: t ? t.name : 'the teacher', email: r.email, password: r.tempPassword });
+  } catch (err) { showToast(err.message); }
+}
+
+async function resetCurrentStudentPassword() {
+  const id = fv('asm-id'); if (!id) return;
+  const s = STUDENTS_DB.find(x => x.id === id);
+  if (!confirm(`Reset the password for ${s ? s.name : 'this student'}? Their current password will stop working.`)) return;
+  try {
+    const r = await apiFetchDetailed(`/students/${encodeURIComponent(id)}/reset-password`, { method: 'POST' });
+    showCredentials({ title: 'Password reset', name: s ? s.name : 'the student', email: r.email, password: r.tempPassword });
+  } catch (err) { showToast(err.message); }
+}
+
+
 // ──────────────────────────────────────────────────
 // 16. PAGE ROUTER
 //    This is a static multi-page site (not a full SPA), so each HTML file
@@ -938,12 +1132,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadAppData();
   } catch (err) {
     console.error('Failed to load app data:', err.message);
-    showToast('Failed to load data — check your connection.');
+    showToast('Failed to load data - check your connection.');
     return;
   }
 
   setupSidebar();
 
+
+  if (/\/dashboard\.html$/.test(location.pathname)) installBackLogoutGuard();
+  ['asm-phone', 'asm-guardianPhone', 'atm-phone'].forEach(id => bindAutoHyphen(id, [4, 7]));
+  ['asm-cnic', 'atm-cnic'].forEach(id => bindAutoHyphen(id, [5, 7, 1]));
   if (document.getElementById('dash-courses'))         renderStudentDashboard();
   if (document.getElementById('courses-container'))    renderCoursesList();
   if (document.getElementById('curriculum-container'))  renderCourseDetail();
@@ -958,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.getElementById('grading-container'))     initGrading();
   if (document.getElementById('teacher-schedule-grid')) renderTeacherSchedule();
 
-  // Admin pages — real multi-page files, same pattern as Student/Teacher above
+  // Admin pages - real multi-page files, same pattern as Student/Teacher above
   if (document.getElementById('admin-students-tbody'))  renderAdminStudents();
   if (document.getElementById('admin-teachers-tbody'))  renderAdminTeachers();
   if (document.getElementById('admin-batches-grid'))    renderAdminBatches();
@@ -982,8 +1180,8 @@ function renderStudentDashboard() {
   // Sidebar identity
   const av = document.getElementById('sb-avatar');
   const sn = document.getElementById('sb-name');
-  if (av) av.textContent = s.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-  if (sn) sn.textContent = s.name.split(' ')[0];
+  if (av) av.textContent = initialsOf(s.name);
+  if (sn) sn.textContent = firstName(s.name);
 
   // Topbar
   setText('topbar-roll', s.rollNo);
@@ -996,7 +1194,7 @@ function renderStudentDashboard() {
   setText('stat-progress-2', op + '%');
   setText('stat-att',        s.attendance + '%');
   setText('stat-fee',        s.feeStatus);
-  setText('stat-due',        s.nextDue);
+  setText('stat-due', s.nextDue ? fmtDate(s.nextDue) : '-');
 
   const opBar = document.getElementById('overall-prog-bar');
   if (opBar) opBar.style.width = op + '%';
@@ -1016,7 +1214,7 @@ function renderStudentDashboard() {
           <div class="cr-icon" style="background:${c.colorLight};color:${c.color};
                font-family:var(--font-mono);font-weight:700;font-size:0.85rem">${c.icon}</div>
           <div class="cr-info">
-            <h4>${c.title}</h4>
+            <h4>${esc(c.title)}</h4>
             <div class="progress-track">
               <div class="progress-fill" style="width:${pct}%;background:${c.color}"></div>
             </div>
@@ -1055,7 +1253,7 @@ function renderStudentDashboard() {
         dlContainer.innerHTML += `<div class="deadline-item">
           <div class="dl-icon" style="background:${c.colorLight};color:${c.color};
                font-family:var(--font-mono);font-weight:700;font-size:0.75rem">${c.icon}</div>
-          <div class="dl-info" style="flex:1"><h4>${dl.title}</h4><p>${c.title}</p></div>
+          <div class="dl-info" style="flex:1"><h4>${dl.title}</h4><p>${esc(c.title)}</p></div>
           <span class="dl-time" style="color:${color}">${timeText}</span>
         </div>`;
       });
@@ -1072,12 +1270,12 @@ function renderStudentDashboard() {
 
   // Teacher names, resolved from the student's batch → subjectTeachers map
   const studentBatch = BATCHES.find(b => b.name === s.batch);
-  let teacherNames = '—';
+  let teacherNames = '-';
   if (studentBatch?.subjectTeachers) {
     const names = Object.values(studentBatch.subjectTeachers)
       .map(tid => TEACHERS_DB.find(t => t.id === tid)?.name)
       .filter(Boolean);
-    teacherNames = [...new Set(names)].join(', ') || '—';
+    teacherNames = [...new Set(names)].join(', ') || '-';
   }
   setText('dash-teacher', teacherNames);
 }
@@ -1086,21 +1284,14 @@ function renderStudentDashboard() {
 function renderDayClasses(containerId, dayName, label) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const classes = TEACHER_SCHEDULE.filter(r => r.day === dayName);
-  el.innerHTML = '';
-  if (!classes.length) {
-    el.innerHTML = `<p style="color:var(--text-light);font-size:0.8rem">No classes ${label}.</p>`;
-    return;
-  }
-  classes.forEach(r => {
-    el.innerHTML += `<div class="day-class">
-      <div class="class-time">${r.time}</div>
+  const classes = TEACHER_SCHEDULE.filter(r => r.day === dayName).sort((a, b) => String(a.time).localeCompare(String(b.time)));
+  if (!classes.length) { el.innerHTML = `<p style="color:var(--text-light);font-size:0.8rem">No classes ${esc(label)}.</p>`; return; }
+  el.innerHTML = classes.map(r => `<div class="day-class">
+      <div class="class-time">${esc(r.time)}</div>
       <div class="class-info">
-        <h4>${r.subject} <span class="badge badge-blue">Online</span></h4>
-        <p>${r.room || 'Online'} · ${r.duration || 60}min</p>
-      </div>
-    </div>`;
-  });
+        <h4>${esc(r.subject)} <span class="badge ${r.type === 'physical' ? 'badge-green' : 'badge-blue'}">${r.type === 'physical' ? 'Physical' : 'Online'}</span></h4>
+        <p>${esc(r.room || (r.type === 'online' ? 'Online' : 'TBA'))} · ${esc(r.duration || 60)} min</p>
+      </div></div>`).join('');
 }
 
 /** Renders the "My Courses" grid page (one card per enrolled course). */
@@ -1156,24 +1347,104 @@ function renderCoursesList() {
           ${total
             ? `<a href="course-detail.html?id=${c.id}" class="btn btn-primary btn-full btn-sm">Open Course</a>`
             : `<button class="btn btn-outline btn-full btn-sm" disabled title="Your teacher hasn't published any topics yet">No content yet</button>`}
-          <!-- Passes the course ID, not the title. This was
-               openMessage('${'$'}{c.teacher}','${'$'}{c.title}') — two raw strings
-               interpolated into a single-quoted onclick, so a course called
-               "Newton's Laws" produced a JavaScript syntax error in the
-               attribute and the Message button did nothing at all, with no
-               error visible anywhere except the console. It also printed the
-               teacher ID ('T001') as the teacher's name. -->
-          <button class="btn btn-ghost btn-sm" onclick="openMessageForCourse(${Number(c.id)})">Message</button>
         </div>
       </div>`;
   });
 }
 
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function openAttendanceModal(courseId) {
+  const course = COURSES[courseId];
+  if (!course) { showToast('That course no longer exists - reload the page.'); return; }
+  let m = document.getElementById('attendance-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'attendance-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:450;backdrop-filter:blur(2px);padding:1rem';
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:460px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg)">
+      <div style="padding:1.1rem 1.4rem;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.07em">Take Attendance</div>
+        <div style="font-weight:600">${esc(course.title)}</div>
+      </div>
+      <div style="padding:1rem 1.4rem;overflow-y:auto">
+        <div class="form-group">
+          <label>Class date</label>
+          <input type="date" class="form-control" id="att-date" value="${todayISO()}" max="${todayISO()}" onchange="loadAttendanceRoster(${Number(courseId)})">
+        </div>
+        <div id="att-roster" style="font-size:0.82rem;color:var(--text-light)">Loading...</div>
+      </div>
+      <div style="padding:0.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:0.65rem;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="closeAttendanceModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveAttendance(${Number(courseId)})">Save Attendance</button>
+      </div>
+    </div>`;
+  m.style.display = 'flex';
+  loadAttendanceRoster(courseId);
+}
+
+function closeAttendanceModal() {
+  const m = document.getElementById('attendance-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function loadAttendanceRoster(courseId) {
+  const box = document.getElementById('att-roster');
+  if (!box) return;
+  const date = fv('att-date');
+  if (!date) { box.textContent = 'Pick a date first.'; return; }
+  try {
+    const [roster, existing] = await Promise.all([
+      apiFetch(`/attendance/roster/${courseId}`),
+      apiFetch(`/attendance/${courseId}/${encodeURIComponent(date)}`),
+    ]);
+    if (!roster.students.length) { box.textContent = 'No students are enrolled in this course yet.'; return; }
+    const marked = new Map(((existing && existing.entries) || []).map(e => [e.studentId, e.present]));
+    box.innerHTML = `
+      <div style="margin-bottom:0.6rem;color:var(--text-mid)">${existing
+        ? 'Attendance was already taken for this date. Saving will correct it.'
+        : 'Everyone starts as present. Untick the students who were absent.'}</div>
+      ${roster.students.map(s => `
+        <label style="display:flex;align-items:center;gap:0.55rem;padding:0.4rem 0.2rem;border-bottom:1px solid var(--border);cursor:pointer;color:var(--text-dark)">
+          <input type="checkbox" class="att-cb" value="${esc(s.id)}" ${marked.has(s.id) ? (marked.get(s.id) ? 'checked' : '') : 'checked'}>
+          <span style="flex:1;font-weight:500">${esc(s.name)}</span>
+          <span style="font-family:var(--font-mono);font-size:0.7rem;color:var(--text-light)">${esc(s.rollNo)}</span>
+        </label>`).join('')}`;
+  } catch (err) {
+    box.innerHTML = `<span style="color:var(--danger)">${esc(err.message)}</span>`;
+  }
+}
+
+async function saveAttendance(courseId) {
+  const date = fv('att-date');
+  if (!date) { showToast('Pick the class date.'); return; }
+  const boxes = [...document.querySelectorAll('#att-roster .att-cb')];
+  if (!boxes.length) { showToast('There are no students to mark.'); return; }
+  try {
+    await apiFetchDetailed('/attendance', {
+      method: 'POST',
+      body: JSON.stringify({ courseId, date, entries: boxes.map(cb => ({ studentId: cb.value, present: cb.checked })) }),
+    });
+    closeAttendanceModal();
+    STUDENTS_DB = await apiFetch('/students');
+    showToast('Attendance saved.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+
 /** Renders the course-detail page: week/topic curriculum tree on the left, selected topic's content tabs on the right. */
 function renderCourseDetail() {
   const params = new URLSearchParams(location.search);
-  const cid = parseInt(params.get('id')) || 1;
-  const course = COURSES[cid];
+  const cid = parseInt(params.get('id'), 10);
+  const course = (getActiveStudent().enrolledCourseIds || []).includes(cid) ? COURSES[cid] : null;
   // `return` on its own left the page showing the empty skeleton with no
   // explanation, which is indistinguishable from a page that failed to load.
   // A student hitting a course they aren't enrolled in (or a stale bookmark for
@@ -1181,7 +1452,7 @@ function renderCourseDetail() {
   if (!course) {
     setText('cd-title', 'Course not available');
     setText('cd-desc', "This course either no longer exists or you're not enrolled in it. Go back to My Courses and pick one from there.");
-    setText('cd-teacher', '—');
+    setText('cd-teacher', '-');
     return;
   }
 
@@ -1206,7 +1477,7 @@ function renderCourseDetail() {
       <div class="week-header" onclick="toggleWeek(this)">
         <div>
           <span>Week ${week.num}: ${week.title}</span>
-          <div style="font-size:0.62rem;color:var(--text-light);font-weight:400;text-transform:none;letter-spacing:0;margin-top:1px">Uploaded ${week.uploadedDate}</div>
+          <div style="font-size:0.62rem;color:var(--text-light);font-weight:400;text-transform:none;letter-spacing:0;margin-top:1px">Uploaded ${esc(fmtDate(week.uploadedDate))}</div>
         </div>
         <div class="week-stats">
           <span style="font-size:0.68rem;color:var(--success);font-family:var(--font-mono)">${doneW}/${week.topics.length}</span>
@@ -1231,7 +1502,7 @@ function renderCourseDetail() {
           <div class="topic-check ${done ? 'done' : ''}" data-id="${topic.id}" onclick="toggleDone(event,'${topic.id}','${cid}')">
             ${done ? '&#10003;' : ''}
           </div>
-          <div class="topic-title-text" style="${done ? 'text-decoration:line-through;color:var(--text-light)' : ''}">${topic.num} — ${topic.title}</div>
+          <div class="topic-title-text" style="${done ? 'text-decoration:line-through;color:var(--text-light)' : ''}">${topic.num} - ${topic.title}</div>
         </div>
         <div class="topic-pills">${pills}</div>
         ${dueHtml}`;
@@ -1252,7 +1523,7 @@ function renderCourseDetail() {
 
   // Auto-select the very first topic so the content panel isn't empty on load.
   const savedTopicId = getActiveStudent().lastTopic?.[String(cid)];
-  const resumeEl = savedTopicId ? container.querySelector(`.topic-item[data-id="${savedTopicId}"]`) : null;
+  const resumeEl = savedTopicId ? container.querySelector(`.topic-item[data-id="${CSS.escape(savedTopicId)}"]`) : null;
   if (resumeEl) {
     resumeEl.classList.add('active');
     const savedTopic = allTopics(cid).find(t => t.id === savedTopicId);
@@ -1296,7 +1567,7 @@ function toggleDone(e, topicId, cid) {
 
 /** Builds the tabbed content viewer (video/notes/link/quiz/assign tabs) for a selected topic. */
 function loadContent(topic, course) {
-  setText('content-topic-title', topic.num + ' — ' + topic.title);
+  setText('content-topic-title', topic.num + ' - ' + topic.title);
   const tabsEl   = document.getElementById('content-tabs');
   const panelsEl = document.getElementById('content-panels');
   tabsEl.innerHTML = ''; panelsEl.innerHTML = '';
@@ -1320,7 +1591,7 @@ function loadContent(topic, course) {
     const panel = document.createElement('div');
     panel.className = 'content-panel' + (i === 0 ? ' active' : '');
     panel.id = 'panel-' + i;
-    panel.innerHTML = buildPanel(c, topic);
+    panel.innerHTML = buildPanel(c, topic, course);
     panelsEl.appendChild(panel);
   });
 }
@@ -1346,191 +1617,161 @@ function toEmbeddableVideoUrl(raw) {
  * Renders the inner HTML for one content-tab panel, based on its type:
  * video / notes / link / assign (submission form or submitted-state view) / quiz.
  */
-function buildPanel(c, topic) {
+function buildPanel(c, topic, course) {
   const student = getActiveStudent();
 
   if (c.type === 'video') {
-    const embedSrc = toEmbeddableVideoUrl(c.url);
-    return embedSrc
-      ? `<div style="margin-bottom:0.75rem">
-          <div style="position:relative;padding-top:56.25%;background:#000;border-radius:var(--radius)">
-            <iframe src="${escAttr(embedSrc)}" title="${escAttr(topic.title)}"
-              style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:var(--radius)"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen></iframe>
-          </div>
-          ${c.duration ? `<div style="font-size:0.68rem;margin-top:4px;color:var(--text-light);font-family:var(--font-mono)">${esc(c.duration)}</div>` : ''}
-        </div>`
-      : `<div class="video-player" style="margin-bottom:0.75rem">
-          <div class="vp-play">&#9654;</div>
-          <div class="vp-text">${esc(topic.title)}</div>
-          <p style="font-size:0.72rem;color:var(--text-light);margin-top:6px">
-            ${c.url ? `No video link has been added yet for this lecture.` : `No video link has been added yet for this lecture.`}
-          </p>
-        </div>`;
+    const embed = toEmbeddableVideoUrl(c.url);
+    const dur = (c.duration && c.duration !== '-')
+      ? `<div style="font-size:0.68rem;margin-top:4px;color:var(--text-light);font-family:var(--font-mono)">${esc(c.duration)}</div>` : '';
+    if (embed && embed.kind === 'iframe') {
+      return `<div style="margin-bottom:0.75rem">
+        <div style="position:relative;padding-top:56.25%;background:#000;border-radius:var(--radius)">
+          <iframe src="${esc(embed.src)}" title="${esc(topic.title)}"
+            style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:var(--radius)"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen></iframe>
+        </div>${dur}</div>`;
+    }
+    if (embed && embed.kind === 'file') {
+      return `<div style="margin-bottom:0.75rem"><video controls style="width:100%;border-radius:var(--radius);background:#000" src="${esc(embed.src)}"></video>${dur}</div>`;
+    }
+    return `<div class="video-player" style="margin-bottom:0.75rem">
+      <div class="vp-play">&#9654;</div>
+      <div class="vp-text">${esc(topic.title)}</div>
+      <p style="font-size:0.72rem;color:var(--text-light);margin-top:6px">No video has been added for this lecture yet.</p>
+    </div>`;
   }
 
-  if (c.type === 'notes') return `
+  if (c.type === 'notes' || c.type === 'link') {
+    const isNotes = c.type === 'notes';
+    const href = safeHref(c.url);
+    return `
     <div style="display:flex;align-items:center;gap:1rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem">
       <div style="flex:1">
-        <div style="font-size:0.82rem;font-weight:600;margin-bottom:3px">${topic.title} — Notes</div>
-        <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:0.75rem">Click to download the PDF notes for this topic.</p>
-        <a href="${c.url || '#'}" target="_blank" class="btn btn-outline btn-sm">Download Notes</a>
+        <div style="font-size:0.82rem;font-weight:600;margin-bottom:3px">${isNotes ? esc(topic.title) + ' - Notes' : esc(c.label || 'Reference link')}</div>
+        <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:0.75rem">${isNotes ? 'Open the notes for this topic.' : 'External reference resource.'}</p>
+        ${href
+          ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">${isNotes ? 'Open Notes' : 'Open Resource'}</a>`
+          : '<button class="btn btn-outline btn-sm" disabled>Not added yet</button>'}
       </div>
     </div>`;
-
-  if (c.type === 'link') return `
-    <div style="display:flex;align-items:center;gap:1rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem">
-      <div style="flex:1">
-        <div style="font-size:0.82rem;font-weight:600;margin-bottom:3px">${c.label}</div>
-        <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:0.75rem">External reference resource.</p>
-        <a href="${c.url || '#'}" target="_blank" class="btn btn-outline btn-sm">Open Resource</a>
-      </div>
-    </div>`;
+  }
 
   if (c.type === 'assign') {
-    const assignRec = student.assignments.find(a => a.topicId === topic.id);
+    const rec = (student.assignments || []).find(a => a.topicId === topic.id);
 
-    // Already submitted → show status card (graded or awaiting review).
-    if (assignRec?.submitted) {
-      const pct = assignRec.marks !== null && assignRec.totalMarks
-        ? Math.round(assignRec.marks / assignRec.totalMarks * 100) : null;
-      const approved = assignRec.approved;
+    if (rec && rec.submitted) {
+      const approved = !!rec.approved;
+      const hasMarks = rec.marks !== null && rec.marks !== undefined && rec.totalMarks;
+      const pct = approved && hasMarks ? Math.round(rec.marks / rec.totalMarks * 100) : null;
       return `
-        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:var(--radius);
-                    padding:0.85rem 1rem;margin-bottom:0.85rem">
-          <div style="font-weight:600;font-size:0.82rem;color:#166534;margin-bottom:2px">
-            Submitted on ${assignRec.submittedOn}
-          </div>
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:var(--radius);padding:0.85rem 1rem;margin-bottom:0.85rem">
+          <div style="font-weight:600;font-size:0.82rem;color:#166534;margin-bottom:2px">Submitted on ${esc(fmtDate(rec.submittedOn))}</div>
           <div style="font-size:0.75rem;color:#15803D">
             ${approved
-              ? `Grade: <strong style="font-family:var(--font-mono)">${assignRec.grade}</strong>
-                 — ${assignRec.marks}/${assignRec.totalMarks} marks`
-              : 'Submitted — awaiting teacher review'}
+              ? `Grade: <strong style="font-family:var(--font-mono)">${esc(rec.grade || '-')}</strong> - ${esc(rec.marks)}/${esc(rec.totalMarks)} marks`
+              : 'Submitted - awaiting teacher review'}
           </div>
-          ${assignRec.feedback
-            ? `<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #BBF7D0;
-                           font-size:0.78rem;color:#166534">
-                 <strong>Feedback:</strong> ${assignRec.feedback}
-               </div>` : ''}
+          ${approved && rec.feedback
+            ? `<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid #BBF7D0;font-size:0.78rem;color:#166534"><strong>Feedback:</strong> ${esc(rec.feedback)}</div>` : ''}
         </div>
         ${pct !== null ? `
           <div class="progress-track" style="margin-bottom:6px">
-            <div class="progress-fill ${pct >= 70 ? 'green' : pct >= 50 ? 'orange' : 'red'}"
-              style="width:${pct}%"></div>
+            <div class="progress-fill ${pct >= 70 ? 'green' : pct >= 50 ? 'orange' : 'red'}" style="width:${pct}%"></div>
           </div>
-          <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">
-            ${pct}% — ${assignRec.grade || 'Pending'}
-          </div>` : ''}`;
+          <div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${pct}% - ${esc(rec.grade || 'Pending')}</div>` : ''}`;
     }
 
-    // Not yet submitted → show the submission form (text answer + file attach).
     const topicSafe = topic.id.replace(/[^a-z0-9]/gi, '_');
     return `
-      <div style="background:var(--bg);border:1px solid var(--border);
-                  border-radius:var(--radius);padding:0.85rem 1rem;
-                  margin-bottom:0.85rem;font-size:0.82rem;
-                  color:var(--text-mid);line-height:1.6">
-        ${c.detail || 'Complete and submit this assignment.'}
-        ${c.totalMarks
-          ? `<div style="margin-top:4px;font-size:0.72rem;color:var(--text-light);
-                         font-family:var(--font-mono)">Total marks: ${c.totalMarks}</div>`
-          : ''}
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.85rem 1rem;margin-bottom:0.85rem;font-size:0.82rem;color:var(--text-mid);line-height:1.6">
+        ${esc(c.detail || 'Complete and submit this assignment.')}
+        ${c.totalMarks ? `<div style="margin-top:4px;font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">Total marks: ${esc(c.totalMarks)}</div>` : ''}
       </div>
-
       <div style="margin-bottom:0.85rem">
-        <label style="display:block;font-size:0.72rem;font-weight:600;
-                      text-transform:uppercase;letter-spacing:0.06em;
-                      color:var(--text-mid);margin-bottom:0.35rem">
-          Your Answer / Comments
-        </label>
-        <textarea id="assign-text-${topicSafe}" class="form-control"
-          placeholder="Type your answer, notes, or any comments for the teacher..."
-          style="min-height:100px;font-size:0.82rem;resize:vertical"></textarea>
+        <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.35rem">Your Answer / Comments</label>
+        <textarea id="assign-text-${topicSafe}" class="form-control" placeholder="Type your answer, notes, or any comments for the teacher..." style="min-height:100px;font-size:0.82rem;resize:vertical"></textarea>
       </div>
-
       <div style="margin-bottom:0.85rem">
-        <label style="display:block;font-size:0.72rem;font-weight:600;
-                      text-transform:uppercase;letter-spacing:0.06em;
-                      color:var(--text-mid);margin-bottom:0.35rem">
-          Attach File (PDF, Word, Image)
-        </label>
+        <label style="display:block;font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-mid);margin-bottom:0.35rem">Attach File (PDF, Word, Image)</label>
         <div id="upload-zone-${topicSafe}"
-          style="border:2px dashed var(--border);border-radius:var(--radius);
-                 padding:1.25rem;text-align:center;cursor:pointer;
-                 background:var(--bg);transition:border-color 0.15s"
+          style="border:2px dashed var(--border);border-radius:var(--radius);padding:1.25rem;text-align:center;cursor:pointer;background:var(--bg);transition:border-color 0.15s"
           onclick="document.getElementById('file-inp-${topicSafe}').click()"
           ondragover="event.preventDefault();this.style.borderColor='var(--blue)'"
           ondragleave="this.style.borderColor='var(--border)'"
           ondrop="handleFileDrop(event,'${topicSafe}')">
-          <div style="font-size:1.2rem;margin-bottom:4px;color:var(--text-light)">↑</div>
-          <div style="font-size:0.82rem;font-weight:500;color:var(--text-dark)">
-            Click to browse or drag a file here
-          </div>
-          <div style="font-size:0.72rem;color:var(--text-light);margin-top:3px">
-            PDF, DOC, DOCX, JPG, PNG — max 10MB
-          </div>
-          <div id="file-name-${topicSafe}"
-            style="margin-top:6px;font-size:0.75rem;font-family:var(--font-mono);
-                   color:var(--blue);display:none"></div>
+          <div style="font-size:1.2rem;margin-bottom:4px;color:var(--text-light)">&#8593;</div>
+          <div style="font-size:0.82rem;font-weight:500;color:var(--text-dark)">Click to browse or drag a file here</div>
+          <div style="font-size:0.72rem;color:var(--text-light);margin-top:3px">PDF, DOC, DOCX, JPG, PNG - max 10MB</div>
+          <div id="file-name-${topicSafe}" style="margin-top:6px;font-size:0.75rem;font-family:var(--font-mono);color:var(--blue);display:none"></div>
         </div>
-        <input type="file" id="file-inp-${topicSafe}"
-          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-          style="display:none"
-          onchange="showFileName('${topicSafe}',this)">
+        <input type="file" id="file-inp-${topicSafe}" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style="display:none" onchange="showFileName('${topicSafe}',this)">
       </div>
-
       <div style="display:flex;gap:0.65rem;align-items:center">
-        <button class="btn btn-primary btn-sm"
-          onclick="submitAssignment('${topic.id}','${topicSafe}')">
-          Submit Assignment
-        </button>
-        <span id="assign-status-${topicSafe}"
-          style="font-size:0.78rem;color:var(--text-light)"></span>
+        <button class="btn btn-primary btn-sm" onclick="submitAssignment('${escAttr(topic.id)}','${topicSafe}')">Submit Assignment</button>
+        <span id="assign-status-${topicSafe}" style="font-size:0.78rem;color:var(--text-light)"></span>
       </div>`;
   }
 
   if (c.type === 'quiz') {
-    const prevScore = student.quizScores.find(q => q.topicId === topic.id);
-    const prevPct   = prevScore ? Math.round(prevScore.score / prevScore.total * 100) : null;
-    const courseId  = Object.values(COURSES).find(course =>
-      course.weeks.some(w => w.topics.some(t => t.id === topic.id))
-    )?.id;
+    const questions = Array.isArray(c.questions) ? c.questions : [];
+    if (!questions.length) {
+      return '<p style="color:var(--text-light);font-size:0.82rem">No questions have been added to this quiz yet.</p>';
+    }
+    const prev = (student.quizScores || []).find(q => q.topicId === topic.id);
+    const prevPct = prev && prev.total ? Math.round(prev.score / prev.total * 100) : null;
     const lowScore = prevPct !== null && prevPct < 70;
+    const used = prev ? (prev.attemptNum || 1) : 0;
+    const maxAttempts = 2;   // must match MAX_QUIZ_ATTEMPTS on the server
+    if (used >= maxAttempts) {
+      return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.85rem 1rem;font-size:0.82rem;color:var(--text-mid)">
+        You have used all ${maxAttempts} attempts for this quiz. Your best score is <strong style="font-family:var(--font-mono)">${esc(prev.score)}/${esc(prev.total)}</strong>.</div>`;
+    }
+    const courseId = course ? Number(course.id) : null;
 
-    const qs = c.questions.map((q, qi) => `
+    const qs = questions.map((q, qi) => `
       <div class="quiz-q">
-        <p>Q${qi + 1}. ${q.q}</p>
-        ${q.options.map((opt, oi) => `
-          <div class="quiz-opt" data-qi="${qi}" data-oi="${oi}" data-ans="${q.correct}"
-            onclick="pickOpt(this)">
-            <span class="quiz-opt-label">${String.fromCharCode(65 + oi)}</span> ${opt}
+        <p>Q${qi + 1}. ${esc(q.q)}</p>
+        ${(q.options || []).map((opt, oi) => `
+          <div class="quiz-opt" data-qi="${qi}" data-oi="${oi}" onclick="pickOpt(this)">
+            <span class="quiz-opt-label">${String.fromCharCode(65 + oi)}</span> ${esc(opt)}
           </div>`).join('')}
       </div>`).join('');
 
     return `
       ${lowScore && courseId ? `
-      <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);
-                  padding:0.65rem 0.85rem;margin-bottom:0.85rem;font-size:0.78rem;
-                  display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
-        <span style="color:#92400E">
-          Your previous score was ${prevPct}%. You can re-attempt with AI-generated questions.
-        </span>
-        <button class="btn btn-sm"
-          style="background:#D97706;color:#fff;border:none;white-space:nowrap;flex-shrink:0"
-          onclick="openAIStudyPanel(${courseId})">
-          Study &amp; Retry
-        </button>
+      <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:var(--radius);padding:0.65rem 0.85rem;margin-bottom:0.85rem;font-size:0.78rem;display:flex;align-items:center;justify-content:space-between;gap:0.75rem">
+        <span style="color:#92400E">Your previous score was ${prevPct}%. You can practise with AI-generated questions.</span>
+        <button class="btn btn-sm" style="background:#D97706;color:#fff;border:none;white-space:nowrap;flex-shrink:0" onclick="openAIStudyPanel(${courseId})">Study &amp; Practise</button>
       </div>` : ''}
+      <div style="font-size:0.72rem;color:var(--text-light);margin-bottom:0.5rem">Attempt ${used + 1} of ${maxAttempts}</div>
       <div id="qz${Math.random().toString(36).slice(2, 7)}">${qs}
-        <button class="btn btn-primary btn-sm"
-          onclick="submitQuiz(this, ${c.questions.length}, '${topic.id}', ${course.id}, '${course.subject.replace(/'/g, "\\'")}', '${topic.title.replace(/'/g, "\\'")}')"
-          style="margin-top:0.5rem">Submit Quiz</button>
+        <button class="btn btn-primary btn-sm" onclick="submitQuiz(this, '${escAttr(topic.id)}')" style="margin-top:0.5rem">Submit Quiz</button>
         <div class="quiz-result"></div>
       </div>`;
   }
 
   return '<p style="color:var(--text-light);font-size:0.82rem">Content coming soon.</p>';
+}
+
+async function downloadAssignmentFile(filename, saveAs) {
+  try {
+    const res = await fetch(`${API_BASE}/files/${encodeURIComponent(filename)}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      throw new Error(b.message || `Download failed (${res.status})`);
+    }
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement('a');
+    a.href = url; a.download = saveAs || filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch (err) {
+    showToast(err.message);
+  }
 }
 
 function unreadCount() { return NOTIFICATIONS.filter(n => !n.read).length; }
@@ -1564,7 +1805,7 @@ function studentProgressScore(student, courseId) {
   const quizGot   = quizzes.reduce((a, b) => a + b.score, 0);
   const quizPct   = quizTotal ? Math.round(quizGot / quizTotal * 100) : 0;
 
-  const assigns     = student.assignments.filter(a => a.courseId === courseId && a.marks !== null);
+  const assigns     = student.assignments.filter(a => a.courseId === courseId && a.approved && a.marks !== null && a.marks !== undefined);
   const assignTotal = assigns.reduce((a, b) => a + b.totalMarks, 0);
   const assignGot   = assigns.reduce((a, b) => a + b.marks, 0);
   const assignPct   = assignTotal ? Math.round(assignGot / assignTotal * 100) : 0;
@@ -1581,99 +1822,132 @@ function pickOpt(el) {
 }
 
 /** Grades an in-page topic quiz (not AI-generated) by comparing selected options to each question's `data-ans`. */
-async function submitQuiz(btn, total, topicId, courseId, subject, topicTitle) {
+async function submitQuiz(btn, topicId) {
   const wrap = btn.closest('div[id]');
-  let correct = 0;
-
-  wrap.querySelectorAll('.quiz-q').forEach(qEl => {
+  const qEls = [...wrap.querySelectorAll('.quiz-q')];
+  const answers = qEls.map(qEl => {
     const sel = qEl.querySelector('.quiz-opt.selected');
-    if (!sel) return;
-    const chosen = parseInt(sel.dataset.oi), ans = parseInt(sel.dataset.ans);
-    qEl.querySelectorAll('.quiz-opt').forEach(o => {
-      if (parseInt(o.dataset.oi) === ans) o.classList.add('correct');
-      else if (parseInt(o.dataset.oi) === chosen) o.classList.add('wrong');
-    });
-    if (chosen === ans) correct++;
+    return sel ? parseInt(sel.dataset.oi, 10) : null;
   });
+  const blank = answers.filter(a => a === null).length;
+  if (blank && !confirm(`${blank} question(s) are unanswered and will count as wrong. Submit anyway?`)) return;
 
-  btn.style.display = 'none';
-  const res = wrap.querySelector('.quiz-result');
-  const pct = Math.round(correct / total * 100);
-  res.style.display = 'block';
-  res.style.cssText = `display:block;padding:.7rem .9rem;border-radius:var(--radius);font-weight:500;font-size:.82rem;background:${pct >= 70 ? 'var(--success-light)' : 'var(--danger-light)'};color:${pct >= 70 ? 'var(--success)' : 'var(--danger)'};border:1px solid ${pct >= 70 ? '#bbf7d0' : '#fecaca'}`;
-  res.innerHTML = `You scored <strong style="font-family:var(--font-mono)">${correct}/${total}</strong> (${pct}%) — ${pct >= 70 ? 'Well done.' : 'Review and try again.'}`;
-
+  btn.disabled = true;
   try {
     const student = getActiveStudent();
-    const entry = await apiFetch(`/students/${student.id}/quiz-scores`, {
+    const r = await apiFetch(`/students/${encodeURIComponent(student.id)}/quiz-scores`, {
       method: 'POST',
-      body: JSON.stringify({ topic: topicTitle, subject, topicId, score: correct, total }),
+      body: JSON.stringify({ topicId, answers }),
     });
+
+    qEls.forEach((qEl, qi) => {
+      qEl.querySelectorAll('.quiz-opt').forEach(o => {
+        const oi = parseInt(o.dataset.oi, 10);
+        o.style.pointerEvents = 'none';
+        if (oi === r.correctAnswers[qi]) o.classList.add('correct');
+        else if (oi === answers[qi]) o.classList.add('wrong');
+      });
+    });
+
+    const score = r.attemptScore; const total = r.entry.total
+    const pct = Math.round(score / total * 100);
+    const ok = pct >= 70;
+    btn.style.display = 'none';
+    const res = wrap.querySelector('.quiz-result');
+    res.style.cssText = `display:block;padding:.7rem .9rem;border-radius:var(--radius);font-weight:500;font-size:.82rem;background:${ok ? 'var(--success-light)' : 'var(--danger-light)'};color:${ok ? 'var(--success)' : 'var(--danger)'};border:1px solid ${ok ? '#bbf7d0' : '#fecaca'}`;
+    res.innerHTML = `You scored <strong style="font-family:var(--font-mono)">${score}/${total}</strong> (${pct}%) - ${ok ? 'Well done.' : 'Review and try again.'} ${r.attemptsLeft > 0 ? `You have ${r.attemptsLeft} attempt left.` : 'No attempts left.'}`;
+
     const existing = student.quizScores.find(q => q.topicId === topicId);
-    if (existing) Object.assign(existing, entry); else student.quizScores.push(entry);
+    if (existing) Object.assign(existing, r.entry); else student.quizScores.push(r.entry);
   } catch (err) {
-    showToast('Score shown but not saved: ' + err.message);
+    btn.disabled = false;
+    showToast(err.message);
   }
 }
 
 /** Renders the student's weekly class schedule page, grouped by day. */
 function renderSchedule() {
   const container = document.getElementById('schedule-container');
+  if (!container) return;
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-  days.forEach(day => {
-    const classes = TEACHER_SCHEDULE.filter(r => r.day === day);
-    if (!classes.length) return;
-    const isToday = day === today;
-    const rows = classes.map(r => {
-      const badge = `<span class="badge badge-blue">Online</span>`;
-      return `<div class="day-class"><div class="class-time">${r.time}</div><div class="class-info"><h4>${r.subject} ${badge}</h4><p>${r.room}</p></div></div>`;
-    }).join('');
-    container.innerHTML += `<div class="day-card"><div class="day-card-head ${isToday ? 'today' : ''}">${day}${isToday ? ' — Today' : ''}</div>${rows}</div>`;
-  });
+  container.innerHTML = days.map(day => {
+    const classes = TEACHER_SCHEDULE.filter(r => r.day === day).sort((a, b) => String(a.time).localeCompare(String(b.time)));
+    if (!classes.length) return '';
+    const rows = classes.map(r => `<div class="day-class"><div class="class-time">${esc(r.time)}</div><div class="class-info">
+        <h4>${esc(r.subject)} <span class="badge ${r.type === 'physical' ? 'badge-green' : 'badge-blue'}">${r.type === 'physical' ? 'Physical' : 'Online'}</span></h4>
+        <p>${esc(r.room || 'TBA')}</p></div></div>`).join('');
+    return `<div class="day-card"><div class="day-card-head ${day === today ? 'today' : ''}">${day}${day === today ? ' - Today' : ''}</div>${rows}</div>`;
+  }).join('');
 }
 
-/** Renders the student's attendance table (per-subject) plus the assignment-status table below it. */
+/** Every assignment in the student's courses, with their submission (if any). */
+function allAssignmentsForStudent(student) {
+  const rows = [];
+  (student.enrolledCourseIds || []).forEach(cid => {
+    const c = COURSES[cid];
+    if (!c) return;
+    c.weeks.forEach(w => w.topics.forEach(t => {
+      if (!(t.contents || []).some(x => x.type === 'assign')) return;
+      rows.push({
+        title: t.title, course: c.title, dueDate: t.dueDate || '',
+        rec: (student.assignments || []).find(a => a.topicId === t.id) || null,
+      });
+    }));
+  });
+  return rows;
+}
+
 function renderAttendance() {
   const student = getActiveStudent();
-  const tbody = document.getElementById('attendance-tbody');
+  const tbody   = document.getElementById('attendance-tbody');
   const overall = document.getElementById('att-overall');
 
-  student.attendanceDetail.forEach(row => {
-    const pct = Math.round(row.attended / row.total * 100);
-    const color = pct >= 85 ? 'var(--success)' : pct >= 75 ? 'var(--warning)' : 'var(--danger)';
-    const status = pct >= 85 ? 'Good' : pct >= 75 ? 'Low' : 'Critical';
-    tbody.innerHTML += `<tr>
-      <td><strong>${row.subject}</strong></td>
-      <td style="color:var(--success);font-weight:600;font-family:var(--font-mono)">${row.attended}</td>
-      <td style="color:var(--danger);font-weight:600;font-family:var(--font-mono)">${row.missed}</td>
-      <td style="font-family:var(--font-mono)">${row.total}</td>
-      <td><div style="display:flex;align-items:center;gap:8px">
-        <div class="progress-track" style="width:70px"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>
-        <strong style="color:${color};font-family:var(--font-mono)">${pct}%</strong>
-      </div></td>
-      <td><span class="badge ${pct >= 85 ? 'badge-green' : pct >= 75 ? 'badge-orange' : 'badge-red'}">${status}</span></td>
-    </tr>`;
-  });
+  if (tbody) {
+    const detail = student.attendanceDetail || [];
+    tbody.innerHTML = detail.length ? detail.map(row => {
+      const pct = row.total ? Math.round(row.attended / row.total * 100) : 0;
+      const color  = pct >= 85 ? 'var(--success)' : pct >= 75 ? 'var(--warning)' : 'var(--danger)';
+      const status = pct >= 85 ? 'Good' : pct >= 75 ? 'Low' : 'Critical';
+      return `<tr>
+        <td><strong>${esc(row.subject)}</strong></td>
+        <td style="color:var(--success);font-weight:600;font-family:var(--font-mono)">${esc(row.attended)}</td>
+        <td style="color:var(--danger);font-weight:600;font-family:var(--font-mono)">${esc(row.missed)}</td>
+        <td style="font-family:var(--font-mono)">${esc(row.total)}</td>
+        <td><div style="display:flex;align-items:center;gap:8px">
+          <div class="progress-track" style="width:70px"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div>
+          <strong style="color:${color};font-family:var(--font-mono)">${pct}%</strong>
+        </div></td>
+        <td><span class="badge ${pct >= 85 ? 'badge-green' : pct >= 75 ? 'badge-orange' : 'badge-red'}">${status}</span></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:1.5rem;font-size:0.82rem">No classes have been marked yet.</td></tr>';
+  }
 
-  if (overall) { overall.textContent = student.attendance + '%'; overall.style.color = student.attendance >= 85 ? 'var(--success)' : 'var(--warning)'; }
+  if (overall) {
+    overall.textContent = (student.attendance || 0) + '%';
+    overall.style.color = student.attendance >= 85 ? 'var(--success)' : 'var(--warning)';
+  }
 
   const atbody = document.getElementById('assignment-tbody');
   if (atbody) {
-    student.assignments.forEach(a => {
+    const rows = allAssignmentsForStudent(student);
+    atbody.innerHTML = rows.length ? rows.map(a => {
+      const rec = a.rec;
       const days = getDueDays(a.dueDate);
-      const statusHtml = a.submitted ? `<span class="badge badge-green">Submitted</span>` :
-        days !== null && days < 0 ? `<span class="badge badge-red">Overdue</span>` :
-        days !== null && days <= 3 ? `<span class="badge badge-orange">Due Soon</span>` :
-        `<span class="badge badge-blue">Pending</span>`;
-      const gradeHtml = a.grade ? `<strong>${a.grade}</strong>` : a.submitted ? '<span style="color:var(--text-light)">Awaiting</span>' : '—';
-      atbody.innerHTML += `<tr>
-        <td><strong>${a.title}</strong></td><td>${a.course}</td>
-        <td style="font-family:var(--font-mono);font-size:0.8rem">${a.dueDate}</td>
-        <td style="font-family:var(--font-mono);font-size:0.8rem">${a.submittedOn || '—'}</td>
+      const statusHtml = rec && rec.submitted ? '<span class="badge badge-green">Submitted</span>'
+        : days !== null && days < 0 ? '<span class="badge badge-red">Overdue</span>'
+        : days !== null && days <= 3 ? '<span class="badge badge-orange">Due Soon</span>'
+        : '<span class="badge badge-blue">Pending</span>';
+      // A grade is shown only after the teacher has approved it.
+      const gradeHtml = rec && rec.approved && rec.grade ? `<strong>${esc(rec.grade)}</strong>`
+        : rec && rec.submitted ? '<span style="color:var(--text-light)">Awaiting</span>' : '-';
+      return `<tr>
+        <td><strong>${esc(a.title)}</strong></td><td>${esc(a.course)}</td>
+        <td style="font-family:var(--font-mono);font-size:0.8rem">${esc(fmtDate(a.dueDate))}</td>
+        <td style="font-family:var(--font-mono);font-size:0.8rem">${rec && rec.submittedOn ? esc(fmtDate(rec.submittedOn)) : '-'}</td>
         <td>${statusHtml}</td><td>${gradeHtml}</td>
       </tr>`;
-    });
+    }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-light);padding:1.5rem;font-size:0.82rem">No assignments yet.</td></tr>';
   }
 }
 
@@ -1681,20 +1955,31 @@ function renderAttendance() {
 function renderFees() {
   const student = getActiveStudent();
   const tbody = document.getElementById('fees-tbody');
-  student.fees.forEach(r => {
-    const paid = r.status === 'paid';
-    tbody.innerHTML += `<tr>
-      <td>${r.label}</td>
-      <td style="font-family:var(--font-mono);font-weight:600">Rs. ${r.amount.toLocaleString()}</td>
-      <td style="font-family:var(--font-mono);font-size:0.8rem">${r.dueDate}</td>
-      <td><span class="badge ${paid ? 'badge-green' : 'badge-red'}">${paid ? 'Paid' : 'Unpaid'}</span></td>
-    </tr>`;
-  });
-  setText('fee-total', 'Rs. ' + student.totalFee.toLocaleString());
-  setText('fee-paid',  'Rs. ' + student.paidAmount.toLocaleString());
-  setText('fee-rem',   'Rs. ' + (student.totalFee - student.paidAmount).toLocaleString());
-  setText('fee-due',   student.nextDue);
-  const pct = Math.round(student.paidAmount / student.totalFee * 100);
+  const today = new Date().toLocaleDateString('en-CA');   // local date as YYYY-MM-DD
+
+  if (tbody) {
+    const fees = student.fees || [];
+    tbody.innerHTML = fees.length ? fees.map(r => {
+      const isPaid    = r.status === 'Paid';
+      const isOverdue = !isPaid && r.dueDate && r.dueDate < today;
+      const label = isPaid ? 'Paid' : isOverdue ? 'Overdue' : 'Pending';
+      const cls   = isPaid ? 'badge-green' : isOverdue ? 'badge-red' : 'badge-orange';
+      return `<tr>
+        <td>${esc(r.label)}</td>
+        <td style="font-family:var(--font-mono);font-weight:600">Rs. ${Number(r.amount || 0).toLocaleString()}</td>
+        <td style="font-family:var(--font-mono);font-size:0.8rem">${esc(fmtDate(r.dueDate))}</td>
+        <td><span class="badge ${cls}">${label}</span></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1.5rem;font-size:0.82rem">No instalments have been set up yet. Please contact the office.</td></tr>';
+  }
+
+  const total = Number(student.totalFee) || 0;
+  const paid  = Number(student.paidAmount) || 0;
+  setText('fee-total', 'Rs. ' + total.toLocaleString());
+  setText('fee-paid',  'Rs. ' + paid.toLocaleString());
+  setText('fee-rem',   'Rs. ' + Math.max(0, total - paid).toLocaleString());
+  setText('fee-due',   student.nextDue ? fmtDate(student.nextDue) : '-');
+  const pct = total ? Math.min(100, Math.round(paid / total * 100)) : 0;
   const fb = document.getElementById('fee-prog-bar');
   if (fb) fb.style.width = pct + '%';
   setText('fee-prog-pct', pct + '% paid');
@@ -1740,7 +2025,7 @@ function renderPerformance() {
                    font-family:var(--font-mono);font-weight:700">${course.icon}</div>
           <div style="flex:1">
             <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:.08em;
-                        color:var(--text-light);font-weight:600">${course.subject}</div>
+                        color:var(--text-light);font-weight:600">${esc(course.subject)}</div>
             <div class="perf-score" style="color:${oColor}">${progress}<span>%</span></div>
             <div class="perf-label">Overall Score</div>
           </div>
@@ -1791,7 +2076,7 @@ function renderPerformance() {
           ${quizzes.map(q => `
             <div style="display:flex;justify-content:space-between;font-size:0.78rem;
                         padding:2px 0;font-family:var(--font-mono)">
-              <span style="font-family:var(--font-body);color:var(--text-mid)">${q.topic}</span>
+              <span style="font-family:var(--font-body);color:var(--text-mid)">${esc(q.topic)}</span>
               <strong style="color:${q.score / q.total >= 0.7 ? 'var(--success)' : 'var(--danger)'}">
                 ${q.score}/${q.total}
               </strong>
@@ -1834,121 +2119,30 @@ function renderPerformance() {
   // Top summary strip (overall score / quiz average / attendance / assignments submitted)
   const summaryEl = document.getElementById('perf-summary');
   if (summaryEl) {
-    const overallPct = overallProgress();
-    const totalQ   = student.quizScores.reduce((a, b) => a + b.total, 0);
-    const gotQ     = student.quizScores.reduce((a, b) => a + b.score, 0);
-    const avgQuiz  = totalQ ? Math.round(gotQ / totalQ * 100) : 0;
-    const submitted = student.assignments.filter(a => a.submitted).length;
-    const total     = student.assignments.length;
+    const official  = student.quizScores.filter(q => !q.isAIRetry);   // practice quizzes don't count
+    const totalQ    = official.reduce((a, b) => a + b.total, 0);
+    const gotQ      = official.reduce((a, b) => a + b.score, 0);
+    const avgQuiz   = totalQ ? Math.round(gotQ / totalQ * 100) : 0;
+    const allAssign = allAssignmentsForStudent(student);
+    const submitted = allAssign.filter(a => a.rec && a.rec.submitted).length;
+    const stat = (val, label) => `
+        <div style="text-align:center">
+          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);font-family:var(--font-mono)">${val}</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">${label}</div>
+        </div>`;
     summaryEl.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem">
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${overallPct}%</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Overall Score</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${avgQuiz}%</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Quiz Average</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${student.attendance}%</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Attendance</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${submitted}/${total}</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Assignments</div>
-        </div>
+        ${stat(overallProgress() + '%', 'Overall Score')}
+        ${stat(avgQuiz + '%', 'Quiz Average')}
+        ${stat((student.attendance || 0) + '%', 'Attendance')}
+        ${stat(submitted + '/' + allAssign.length, 'Assignments')}
       </div>`;
   }
 }
 
-  // Top summary strip (overall score / quiz average / attendance / assignments submitted)
-  const summaryEl = document.getElementById('perf-summary');
-  if (summaryEl) {
-    const overallPct = overallProgress();
-    const totalQ   = student.quizScores.reduce((a, b) => a + b.total, 0);
-    const gotQ     = student.quizScores.reduce((a, b) => a + b.score, 0);
-    const avgQuiz  = totalQ ? Math.round(gotQ / totalQ * 100) : 0;
-    const submitted = student.assignments.filter(a => a.submitted).length;
-    const total     = student.assignments.length;
-    summaryEl.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1rem">
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${overallPct}%</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Overall Score</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${avgQuiz}%</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Quiz Average</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${student.attendance}%</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Attendance</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:1.8rem;font-weight:700;color:var(--text-dark);
-                      font-family:var(--font-mono)">${submitted}/${total}</div>
-          <div style="font-size:0.72rem;color:var(--text-light)">Assignments</div>
-        </div>
-      </div>`;
-  }
 
 
-// ══════════════════════════════════════════════════
-//   18. MESSAGING (mock student ↔ teacher chat — not persisted)
-// ══════════════════════════════════════════════════
-let msgHistory = [];
 
-/**
- * Opens the "message my teacher" modal for a course, by ID.
- *
- * Callers pass the course id rather than pre-resolved display strings, so the
- * teacher's name is looked up here (through teacherLabel, since Course.teacher
- * holds an ID) and no user-controlled text has to survive a trip through an
- * HTML attribute.
- */
-function openMessageForCourse(courseId) {
-  const c = COURSES[courseId];
-  if (!c) { showToast('That course is no longer available.'); return; }
-  openMessage(teacherLabel(c.teacher), c.title);
-}
-
-function openMessage(teacher, course) {
-  const modal = document.getElementById('msg-modal');
-  if (!modal) return;
-  setText('msg-teacher-name', teacher);
-  setText('msg-course-name', course);
-  msgHistory = [{ from: 'teacher', text: `Hello — how can I help you with ${course}?` }];
-  renderMessages();
-  modal.classList.add('open');
-}
-function closeMessage() { const modal = document.getElementById('msg-modal'); if (modal) modal.classList.remove('open'); }
-
-function renderMessages() {
-  const hist = document.getElementById('msg-history');
-  if (!hist) return;
-  // esc() matters here even though the history is local-only: the student types
-  // these messages themselves, and unescaped innerHTML meant typing "<b>hi" in
-  // your own chat box rewrote the page layout.
-  hist.innerHTML = msgHistory.map(m => `<div class="msg-bubble ${escAttr(m.from)}">${esc(m.text)}</div>`).join('');
-  hist.scrollTop = hist.scrollHeight;
-}
-
-function sendMessage() {
-  const inp = document.getElementById('msg-input');
-  if (!inp || !inp.value.trim()) return;
-  msgHistory.push({ from: 'student', text: inp.value.trim() }); inp.value = '';
-  renderMessages();
-  // Canned auto-reply, since there's no real backend behind this chat yet.
-  setTimeout(() => { msgHistory.push({ from: 'teacher', text: "Thank you — I'll respond shortly." }); renderMessages(); }, 1000);
-}
 
 // ══════════════════════════════════════════════════
 //   19. TEACHER PAGES
@@ -1958,6 +2152,11 @@ function sendMessage() {
 function renderTeacherDashboard() {
   const courseIds = getTeacherCourseIds();
   const myCourses = courseIds.map(id => COURSES[id]).filter(Boolean);
+  const me = getActiveTeacher();
+  setText('t-welcome', me ? 'Welcome, ' + firstName(me.name) : 'Welcome');
+  setText('t-subject-label', myCourses.length
+    ? `${((me && me.subjects) || []).join(', ')} - ${myCourses.length} course${myCourses.length === 1 ? '' : 's'} assigned`
+    : 'No courses have been assigned to you yet.');
 
   const pendingGrades = STUDENTS_DB.flatMap(s =>
     s.assignments.filter(a => courseIds.includes(a.courseId) && a.submitted && !a.approved)
@@ -1999,7 +2198,7 @@ function renderTeacherDashboard() {
           <div class="cr-icon" style="background:${c.colorLight};color:${c.color};
                font-family:var(--font-mono);font-weight:700">${c.icon}</div>
           <div class="cr-info">
-            <h4>${c.title}</h4>
+            <h4>${esc(c.title)}</h4>
             <small>${c.weeks.length} weeks · ${allTopics(c.id).length} topics · ${enrolled} students</small>
           </div>
           <a href="courses.html" class="btn btn-ghost btn-sm">Open</a>
@@ -2024,8 +2223,8 @@ function renderTeacherDashboard() {
           <div style="display:flex;align-items:center;gap:0.75rem;
                       padding:0.6rem 0;border-bottom:1px solid var(--border)">
             <div style="flex:1">
-              <div style="font-size:0.82rem;font-weight:500">${a.title}</div>
-              <div style="font-size:0.72rem;color:var(--text-light)">${a.studentName} · ${a.course}</div>
+              <div style="font-size:0.82rem;font-weight:500">${esc(a.title)}</div>
+              <div style="font-size:0.72rem;color:var(--text-light)">${esc(a.studentName)} · ${esc(a.course)}</div>
             </div>
             <a href="grading.html" class="btn btn-outline btn-sm">Review</a>
           </div>`;
@@ -2048,15 +2247,15 @@ function renderTeacherDashboard() {
           <div class="day-class" style="padding:0.6rem 0">
             <div class="class-time">${r.time}</div>
             <div class="class-info">
-              <h4>${r.subject} ${badge}</h4>
-              <p>${r.room} · ${r.duration}min</p>
+              <h4>${esc(r.subject)} ${badge}</h4>
+              <p>${esc(r.room)} · ${esc(r.duration)} min</p>
             </div>
           </div>`;
       });
     }
   }
 
-  // Recent activity table — last submissions + quiz completions across the teacher's courses
+  // Recent activity table - last submissions + quiz completions across the teacher's courses
   const tbody = document.getElementById('t-activity-tbody');
   if (tbody) {
     const activities = [];
@@ -2067,7 +2266,7 @@ function renderTeacherDashboard() {
           student: s.name,
           action: 'Submitted assignment',
           course: a.course,
-          time: a.submittedOn || '—',
+          time: a.submittedOn || '-',
           status: a.approved ? 'badge-green' : 'badge-orange',
           statusText: a.approved ? 'Graded' : 'Needs Approval',
         }));
@@ -2080,7 +2279,7 @@ function renderTeacherDashboard() {
           student: s.name,
           action: 'Completed quiz',
           course: q.subject,
-          time: q.date || '—',
+          time: q.date || '-',
           status: 'badge-green',
           statusText: 'Auto-graded',
         }));
@@ -2093,7 +2292,7 @@ function renderTeacherDashboard() {
         <tr>
           <td><strong>${a.student}</strong></td>
           <td style="color:var(--text-mid)">${a.action}</td>
-          <td>${a.course}</td>
+          <td>${esc(a.course)}</td>
           <td style="font-family:var(--font-mono);font-size:0.76rem;color:var(--text-light)">${a.time}</td>
           <td><span class="badge ${a.status}">${a.statusText}</span></td>
         </tr>`).join('');
@@ -2116,7 +2315,7 @@ function renderTeacherCourses() {
 
   // Built as an array and assigned once. This used to be `grid.innerHTML += ...`
   // inside the loop, which re-parses and rebuilds the entire grid on every
-  // iteration — and silently discards any event listener attached to a card
+  // iteration - and silently discards any event listener attached to a card
   // rendered on an earlier pass.
   const cards = myCourses.map(c => {
     const enrolled    = STUDENTS_DB.filter(s => s.enrolledCourseIds.includes(c.id)).length;
@@ -2160,6 +2359,7 @@ function renderTeacherCourses() {
         <p style="font-size:0.78rem;color:var(--text-mid);margin-bottom:1rem;line-height:1.5">${esc(c.description)}</p>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto">
           <button class="btn btn-primary btn-sm" onclick="openCourseEditor(${Number(c.id)})">Edit Curriculum</button>
+          <button class="btn btn-outline btn-sm" onclick="openAttendanceModal(${Number(c.id)})">Attendance</button>
           <a href="students.html" class="btn btn-ghost btn-sm">View Students</a>
           ${pendingG > 0 ? `<a href="grading.html" class="btn btn-outline btn-sm"
             style="color:var(--warning);border-color:var(--warning)">${pendingG} to approve</a>` : ''}
@@ -2178,9 +2378,9 @@ function openCourseEditor(cid) {
   // stale card (a course deleted by an admin while the teacher's tab was open)
   // threw "Cannot read properties of undefined" and the editor never opened,
   // with nothing on screen to say why.
-  if (!course) { showToast('That course no longer exists — reload the page.'); return; }
+  if (!course) { showToast('That course no longer exists - reload the page.'); return; }
   const batchName = (BATCHES.find(b => b.id === course.batchId) || {}).name || 'Unknown batch';
-  setText('editor-course-label', `${batchName} · ${course.subject} · ${teacherLabel(course.teacher)}`);
+  setText('editor-course-label', `${batchName} · ${esc(course.subject)} · ${teacherLabel(course.teacher)}`);
   setText('editor-course-title', course.title);
   renderEditorBody(cid);
   const modal = document.getElementById('course-editor-modal');
@@ -2203,7 +2403,7 @@ function renderEditorBody(cid) {
                   justify-content:space-between;border-bottom:1px solid var(--border)">
         <div style="display:flex;align-items:center;gap:0.6rem;flex:1">
           <span style="font-size:0.65rem;font-family:var(--font-mono);color:var(--text-light)">W${week.num}</span>
-          <input type="text" value="${week.title}"
+          <input type="text" value="${esc(week.title)}"
             style="border:none;background:transparent;font-size:0.85rem;font-weight:600;
                    color:var(--text-dark);flex:1;outline:none;font-family:var(--font-body)"
             onchange="updateWeekTitle(${cid}, ${wi}, this.value)">
@@ -2227,7 +2427,7 @@ function renderEditorBody(cid) {
                     background:var(--white);cursor:pointer"
           onclick="toggleTopicEditor('topic-edit-${cid}-${wi}-${ti}')">
           <span style="font-size:0.68rem;font-family:var(--font-mono);color:var(--text-light)">${topic.num}</span>
-          <input type="text" value="${topic.title}"
+          <input type="text" value="${esc(topic.title)}"
             onclick="event.stopPropagation()"
             style="border:none;background:transparent;font-size:0.82rem;font-weight:500;
                    color:var(--text-dark);flex:1;outline:none;font-family:var(--font-body)"
@@ -2296,13 +2496,13 @@ function buildMaterialEditor(topic, cid, wi, ti) {
         <div class="form-group" style="margin:0">
           <label style="font-size:0.72rem">Video URL / Embed Link</label>
           <input type="text" class="form-control" style="font-size:0.78rem"
-            value="${c.url || ''}" placeholder="https://youtube.com/..."
+            value="${esc(c.url || '')}" placeholder="https://youtube.com/..."
             onchange="updateContentField(${cid},${wi},${ti},${ci},'url',this.value)">
         </div>
         <div class="form-group" style="margin:0.4rem 0 0">
           <label style="font-size:0.72rem">Duration (e.g. 18:30)</label>
           <input type="text" class="form-control" style="font-size:0.78rem;width:120px"
-            value="${c.duration || ''}" placeholder="00:00"
+            value="${esc(c.duration || '')}" placeholder="00:00"
             onchange="updateContentField(${cid},${wi},${ti},${ci},'duration',this.value)">
         </div>`;
     } else if (c.type === 'notes') {
@@ -2310,7 +2510,7 @@ function buildMaterialEditor(topic, cid, wi, ti) {
         <div class="form-group" style="margin:0">
           <label style="font-size:0.72rem">Notes PDF URL</label>
           <input type="text" class="form-control" style="font-size:0.78rem"
-            value="${c.url || ''}" placeholder="https://drive.google.com/..."
+            value="${esc(c.url || '')}" placeholder="https://drive.google.com/..."
             onchange="updateContentField(${cid},${wi},${ti},${ci},'url',this.value)">
         </div>`;
     } else if (c.type === 'assign') {
@@ -2319,7 +2519,7 @@ function buildMaterialEditor(topic, cid, wi, ti) {
           <label style="font-size:0.72rem">Assignment Instructions</label>
           <textarea class="form-control" style="font-size:0.78rem;min-height:60px"
             onchange="updateContentField(${cid},${wi},${ti},${ci},'detail',this.value)"
-            >${c.detail || ''}</textarea>
+            >${esc(c.detail || '')}</textarea>
         </div>
         <div class="form-group" style="margin:0.4rem 0 0">
           <label style="font-size:0.72rem">Total Marks</label>
@@ -2339,13 +2539,13 @@ function buildMaterialEditor(topic, cid, wi, ti) {
         <div class="form-group" style="margin:0">
           <label style="font-size:0.72rem">Link Label</label>
           <input type="text" class="form-control" style="font-size:0.78rem"
-            value="${c.label || ''}" placeholder="PMC Reference"
+            value="${esc(c.label || '')}" placeholder="PMC Reference"
             onchange="updateContentField(${cid},${wi},${ti},${ci},'label',this.value)">
         </div>
         <div class="form-group" style="margin:0.4rem 0 0">
           <label style="font-size:0.72rem">URL</label>
           <input type="text" class="form-control" style="font-size:0.78rem"
-            value="${c.url || ''}" placeholder="https://..."
+            value="${esc(c.url || '')}" placeholder="https://..."
             onchange="updateContentField(${cid},${wi},${ti},${ci},'url',this.value)">
         </div>`;
     }
@@ -2408,6 +2608,7 @@ function openQuizEditor(cid, wi, ti, ci) {
   const topic   = COURSES[cid].weeks[wi].topics[ti];
   const content = topic.contents[ci];
   const questions = content.questions || [];
+  questions.forEach(q => { if (q.ans === undefined) q.ans = Number.isInteger(q.correct) ? q.correct : 0; });
 
   let modal = document.getElementById('quiz-editor-modal');
   if (!modal) {
@@ -2422,7 +2623,7 @@ function openQuizEditor(cid, wi, ti, ci) {
                 padding:0.75rem;margin-bottom:0.5rem;background:var(--bg)">
       <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
         <input type="text" class="form-control" style="font-size:0.78rem;flex:1"
-          value="${q.q || ''}" placeholder="Question text"
+          value="${esc(q.q || '')}" placeholder="Question text"
           onchange="COURSES[${cid}].weeks[${wi}].topics[${ti}].contents[${ci}].questions[${qi}].q=this.value">
         <button class="btn btn-danger btn-sm" style="padding:0.2rem 0.4rem"
           onclick="removeQuizQuestion(${cid},${wi},${ti},${ci},${qi})">&#215;</button>
@@ -2433,7 +2634,7 @@ function openQuizEditor(cid, wi, ti, ci) {
             onchange="COURSES[${cid}].weeks[${wi}].topics[${ti}].contents[${ci}].questions[${qi}].ans=${oi}"
             title="Mark as correct answer">
           <input type="text" class="form-control" style="font-size:0.75rem;flex:1"
-            value="${opt}" placeholder="Option ${String.fromCharCode(65 + oi)}"
+            value="${esc(opt)}" placeholder="Option ${String.fromCharCode(65 + oi)}"
             onchange="COURSES[${cid}].weeks[${wi}].topics[${ti}].contents[${ci}].questions[${qi}].options[${oi}]=this.value">
         </div>`).join('')}
       <div style="font-size:0.65rem;color:var(--text-light);margin-top:4px">
@@ -2449,7 +2650,7 @@ function openQuizEditor(cid, wi, ti, ci) {
                   position:sticky;top:0;background:var(--white);z-index:10">
         <div>
           <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.07em">Quiz Editor</div>
-          <div style="font-weight:600">${topic.title}</div>
+          <div style="font-weight:600">${esc(topic.title)}</div>
         </div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-primary btn-sm"
@@ -2706,10 +2907,10 @@ function refreshStudentTable() {
 
     tbody.innerHTML += `<tr>
       <td>
-        <div style="font-weight:600;font-size:0.85rem">${s.name}</div>
-        <div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">${s.batch}</div>
+        <div style="font-weight:600;font-size:0.85rem">${esc(s.name)}</div>
+        <div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">${esc(s.batch)}</div>
       </td>
-      <td style="font-family:var(--font-mono);font-size:0.75rem">${s.rollNo}</td>
+      <td style="font-family:var(--font-mono);font-size:0.75rem">${esc(s.rollNo)}</td>
       <td>
         <div style="display:flex;align-items:center;gap:7px">
           <div class="progress-track" style="width:70px">
@@ -2753,22 +2954,22 @@ function openStudentDetail(sid) {
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:1.25rem">
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;font-family:var(--font-mono)">${s.attendance}%</div><div style="font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Attendance</div></div>
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;font-family:var(--font-mono)">${quizAvg}%</div><div style="font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Quiz Avg</div></div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;font-family:var(--font-mono)">${assignAv !== null ? assignAv + '%' : '—'}</div><div style="font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Assignments</div></div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;font-family:var(--font-mono)">${assignAv !== null ? assignAv + '%' : '-'}</div><div style="font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Assignments</div></div>
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:0.75rem;text-align:center"><div style="font-size:1.4rem;font-weight:700;font-family:var(--font-mono)">${s.assignments.filter(a => a.submitted).length}/${s.assignments.length}</div><div style="font-size:0.65rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">Submitted</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:1.25rem;font-size:0.82rem">
-      <div style="color:var(--text-mid)">Roll No</div><div style="font-family:var(--font-mono)">${s.rollNo}</div>
-      <div style="color:var(--text-mid)">Batch</div><div>${s.batch}</div>
+      <div style="color:var(--text-mid)">Roll No</div><div style="font-family:var(--font-mono)">${esc(s.rollNo)}</div>
+      <div style="color:var(--text-mid)">Batch</div><div>${esc(s.batch)}</div>
       <div style="color:var(--text-mid)">Entry Test</div><div>${s.entryTest}</div>
       <div style="color:var(--text-mid)">City</div><div>${s.city}</div>
-      <div style="color:var(--text-mid)">Email</div><div style="font-family:var(--font-mono);font-size:0.75rem">${s.email}</div>
-      <div style="color:var(--text-mid)">Fee Status</div><div><span class="badge ${s.feeStatus === 'Paid' ? 'badge-green' : s.feeStatus === 'Partially Paid' ? 'badge-orange' : 'badge-red'}">${s.feeStatus}</span></div>
+      <div style="color:var(--text-mid)">Email</div><div style="font-family:var(--font-mono);font-size:0.75rem">${esc(s.email)}</div>
+      // <div style="color:var(--text-mid)">Fee Status</div><div><span class="badge ${s.feeStatus === 'Paid' ? 'badge-green' : s.feeStatus === 'Partially Paid' ? 'badge-orange' : 'badge-red'}">${s.feeStatus}</span></div>
     </div>
     <div style="margin-bottom:1rem">
       <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-light);margin-bottom:0.5rem">Assignments</div>
       ${s.assignments.map(a => `
         <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem">
-          <div style="flex:1"><div style="font-weight:500">${a.title}</div><div style="font-size:0.72rem;color:var(--text-light)">${a.course}</div></div>
+          <div style="flex:1"><div style="font-weight:500">${esc(a.title)}</div><div style="font-size:0.72rem;color:var(--text-light)">${esc(a.course)}</div></div>
           ${a.submitted ? (a.grade ? `<span class="badge badge-green" style="font-family:var(--font-mono)">${a.marks}/${a.totalMarks} · ${a.grade}</span>` : `<span class="badge badge-orange">Needs grading</span>`) : `<span class="badge badge-red">Not submitted</span>`}
           ${a.submitted && !a.grade ? `<button class="btn btn-outline btn-sm" onclick="closeStudentDetail();openGradeModal('${s.id}','${a.id}','assign')">Grade</button>` : ''}
         </div>`).join('')}
@@ -2778,7 +2979,7 @@ function openStudentDetail(sid) {
       ${s.quizScores.map(q => {
         const pct = Math.round(q.score / q.total * 100);
         return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.45rem 0;border-bottom:1px solid var(--border);font-size:0.82rem">
-          <div style="flex:1"><div style="font-weight:500">${q.topic}</div><div style="font-size:0.72rem;color:var(--text-light)">${q.subject} · ${q.date}</div></div>
+          <div style="flex:1"><div style="font-weight:500">${esc(q.topic)}</div><div style="font-size:0.72rem;color:var(--text-light)">${esc(q.subject)} · ${q.date}</div></div>
           <span style="font-family:var(--font-mono);font-weight:600;color:${pct >= 70 ? 'var(--success)' : 'var(--danger)'}">${q.score}/${q.total}</span>
         </div>`;
       }).join('')}
@@ -2795,7 +2996,7 @@ function closeStudentDetail() { document.getElementById('student-detail-modal').
  * dropdown was filled by a second DOMContentLoaded handler inside grading.html.
  * That handler could never work: this file registers its own DOMContentLoaded
  * listener first and that listener is async, so it yields at `await
- * loadAppData()` — meaning the page's handler ran while COURSES was still {}.
+ * loadAppData()` - meaning the page's handler ran while COURSES was still {}.
  * The filter therefore only ever contained "All Courses". Doing it here, from
  * inside the router, guarantees the data has already landed.
  */
@@ -2832,7 +3033,7 @@ function renderGrading() {
         <div>
           <div class="card-title" style="margin:0">Grade Thresholds</div>
           <div style="font-size:0.75rem;color:var(--text-light)">
-            Change a threshold and click Apply — all auto-grades update instantly.
+            Change a threshold and click Apply - all auto-grades update instantly.
           </div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="applyThresholds()">Apply & Update All</button>
@@ -2893,7 +3094,7 @@ function renderGrading() {
     const pct = isAssign
       ? (item.marks !== null && item.totalMarks ? Math.round(item.marks / item.totalMarks * 100) : null)
       : Math.round(item.score / item.total * 100);
-    const autoGrade = pct !== null ? calcGradeFromThreshold(pct) : '—';
+    const autoGrade = pct !== null ? calcGradeFromThreshold(pct) : '-';
     const approved  = isAssign ? !!item.approved : true; // quizzes are always auto-approved
 
     const statusBadge = approved
@@ -2914,9 +3115,9 @@ function renderGrading() {
           ${isAssign ? 'A' : 'Q'}
         </div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:0.88rem">${esc(item.title || item.topic || '—')}</div>
+          <div style="font-weight:600;font-size:0.88rem">${esc(item.title || item.topic || '-')}</div>
           <div style="font-size:0.75rem;color:var(--text-light)">
-            ${esc(item.studentName)} · ${esc(item.course || '—')}
+            ${esc(item.studentName)} · ${esc(item.course || '-')}
             ${isAssign && item.submittedOn ? ` · Submitted ${esc(item.submittedOn)}` : ''}
           </div>
         </div>
@@ -2963,18 +3164,18 @@ function openGradeModal(studentId, itemId, type) {
   document.getElementById('gm-item-id').value    = itemId;
   document.getElementById('gm-item-type').value  = type;
   setText('gm-type-label',   type === 'assign' ? 'Assignment' : 'Quiz');
-  setText('gm-title',        item.title || item.topic || '—');
+  setText('gm-title',        item.title || item.topic || '-');
   setText('gm-student-name', student.name);
-  setText('gm-submitted-on', type === 'assign' ? (item.submittedOn || '—') : (item.date || '—'));
-  setText('gm-course-name',  item.course || '—');
+  setText('gm-submitted-on', type === 'assign' ? (item.submittedOn || '-') : (item.date || '-'));
+  setText('gm-course-name',  item.course || '-');
 
   // Submission preview. Every value here was typed by the STUDENT, so it goes
-  // through esc()/escAttr() — this was raw innerHTML before, which means a
+  // through esc()/escAttr() - this was raw innerHTML before, which means a
   // student could put markup (or a script tag) in their answer text or file name
   // and have it execute in the teacher's session when the teacher opened the
   // grade modal. That is the one XSS path in this app with a real attacker on
   // the other end of it.
-  const FILE_BASE = API_BASE.replace('/api', '');
+  // const FILE_BASE = API_BASE.replace('/api', '');
   const subEl = document.getElementById('gm-submission-content');
   if (subEl) {
     if (type === 'assign') {
@@ -2983,13 +3184,10 @@ function openGradeModal(studentId, itemId, type) {
         html += `<div style="margin-bottom:6px"><strong>Answer:</strong> ${esc(item.answerText)}</div>`;
       }
       if (item.fileUrl) {
-        // Only ever a server-issued /uploads/... path; anything else (a
-        // javascript: URL, an absolute link elsewhere) is refused rather than
-        // rendered as a clickable link in the teacher's page.
-        const safePath = /^\/[\w./-]*$/.test(item.fileUrl) ? item.fileUrl : '';
-        html += safePath
-          ? `<div><strong>File:</strong> <a href="${escAttr(FILE_BASE + safePath)}" target="_blank" rel="noopener noreferrer">${esc(item.fileName || 'Download attachment')}</a></div>`
-          : '<div><strong>File:</strong> <em>attachment path looks wrong — not linked</em></div>';
+        const m = /^\/uploads\/([A-Za-z0-9._-]+)$/.exec(item.fileUrl);
+        html += m
+          ? `<div><strong>File:</strong> <a href="#" onclick="downloadAssignmentFile('${escAttr(m[1])}','${escAttr(item.fileName || m[1])}');return false">${esc(item.fileName || 'Download attachment')}</a></div>`
+          : '<div><strong>File:</strong> <em>attachment path looks wrong - not linked</em></div>';
       }
       subEl.innerHTML = html || '<em>No written answer or file submitted.</em>';
       subEl.style.display = 'block';
@@ -3042,14 +3240,14 @@ function readGradeForm() {
   if (marks > total) { showToast(`Marks (${marks}) cannot exceed the total (${total}).`); return null; }
 
   const student = STUDENTS_DB.find(s => s.id === studentId);
-  if (!student) { showToast('That student is no longer in the list — reload the page.'); return null; }
+  if (!student) { showToast('That student is no longer in the list - reload the page.'); return null; }
 
   const pct = Math.round(marks / total * 100);
   return {
     studentId, itemId, type, marks, total, gradeLtr, feedback, student, pct,
     // The grading list shows calcGradeFromThreshold(pct), because thresholds are
     // editable at the top of the page. Saving used to store calcGradeLetter(pct)
-    // — the hard-coded legacy scale — so after any threshold change the letter
+    // - the hard-coded legacy scale - so after any threshold change the letter
     // in the list and the letter actually saved were different grades.
     grade: gradeLtr || calcGradeFromThreshold(pct),
   };
@@ -3098,14 +3296,14 @@ function refreshAfterGrade() {
   if (document.getElementById('students-tbody'))    refreshStudentTable();
 }
 
-/** "Save Marks" — records the marks without publishing the grade to the student. */
+/** "Save Marks" - records the marks without publishing the grade to the student. */
 async function submitGrade() {
   const f = readGradeForm();
   if (!f) return;
   try {
     await saveGradeFields(f);
     closeGradeModal();
-    showToast(`Marks saved — ${f.grade}. Not published until you approve it.`);
+    showToast(`Marks saved - ${f.grade}. Not published until you approve it.`);
     refreshAfterGrade();
   } catch (err) {
     showToast(err.message);
@@ -3113,11 +3311,11 @@ async function submitGrade() {
 }
 
 /**
- * "Save & Approve" — saves the marks and then approves in one click.
+ * "Save & Approve" - saves the marks and then approves in one click.
  *
  * This function did not exist in app.js at all. The only copy lived in
  * grading.html's inline <script>, mutated STUDENTS_DB in memory, and then called
- * saveStudentsDB() and autoUpdateAttendance() — neither of which exists anywhere
+ * saveStudentsDB() and autoUpdateAttendance() - neither of which exists anywhere
  * in the codebase. So the button threw a ReferenceError partway through: nothing
  * was persisted, the modal stayed open, and the page never re-rendered. From the
  * teacher's side, clicking "Save & Approve" simply did nothing.
@@ -3139,7 +3337,7 @@ async function submitAndApproveGrade() {
       const item = f.student.assignments.find(a => a.id === f.itemId);
       if (item) Object.assign(item, approved);
     }
-    // Quiz attempts have no approval step — they are visible to the student as
+    // Quiz attempts have no approval step - they are visible to the student as
     // soon as they're scored, which is why there's no /approve route for them.
 
     closeGradeModal();
@@ -3155,7 +3353,7 @@ async function submitAndApproveGrade() {
  * The current teacher's own classes, as { row, idx } pairs where idx is the index
  * into TEACHER_SCHEDULE (what editClass/deleteClass expect).
  *
- * GET /api/schedule returns the WHOLE academy timetable — it has to, because the
+ * GET /api/schedule returns the WHOLE academy timetable - it has to, because the
  * student dashboard reads the same endpoint. The teacher page was rendering all
  * of it, so every teacher saw every colleague's classes and could click "edit" on
  * them. The server now refuses that with a 403, but the row shouldn't be offered
@@ -3198,7 +3396,7 @@ function renderTeacherSchedule() {
         <span style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">edit</span>
       </div>`).join('')
       : '<p style="color:var(--text-light);font-size:0.78rem;padding:0.85rem 0.9rem">No classes.</p>';
-    html += `<div class="day-card"><div class="day-card-head ${isToday ? 'today' : ''}">${day}${isToday ? ' — Today' : ''}</div>${rows}</div>`;
+    html += `<div class="day-card"><div class="day-card-head ${isToday ? 'today' : ''}">${day}${isToday ? ' - Today' : ''}</div>${rows}</div>`;
   });
   // Built as one string and assigned once. The old loop did `grid.innerHTML +=`
   // per day, which re-parses the entire grid on every iteration.
@@ -3211,12 +3409,12 @@ function renderTeacherSchedule() {
  * Lives here, called on modal open, because schedule.html used to do this in its
  * own DOMContentLoaded handler. That handler always lost the race: app.js's
  * handler runs first, hits `await loadAppData()` and yields, so the inline one
- * executed while COURSES was still {} — the dropdown was permanently empty and
+ * executed while COURSES was still {} - the dropdown was permanently empty and
  * no class could be scheduled at all.
  *
  * Option values are course IDS. They used to be course titles, which is what
  * forced submitAddClass() into guessing the subject by matching that title back
- * to a course — and storing the title itself as the "subject" when the match
+ * to a course - and storing the title itself as the "subject" when the match
  * failed.
  */
 function populateClassCourseSelect(selectedCourseId = '') {
@@ -3229,7 +3427,7 @@ function populateClassCourseSelect(selectedCourseId = '') {
   }
   sel.innerHTML = '<option value="">Select course...</option>' + ids.map(cid => {
     const c = COURSES[cid];
-    return `<option value="${escAttr(c.id)}">${esc(c.title)} — ${esc(c.subject)}</option>`;
+    return `<option value="${escAttr(c.id)}">${esc(c.title)} - ${esc(c.subject)}</option>`;
   }).join('');
   if (selectedCourseId !== '' && selectedCourseId != null) sel.value = String(selectedCourseId);
 }
@@ -3295,14 +3493,14 @@ async function submitAddClass() {
 
   clearFieldErrors('add-class-modal');
   if (!courseId) {
-    setFieldError('acm-course', 'Pick a course — the class subject comes from it.');
+    setFieldError('acm-course', 'Pick a course - the class subject comes from it.');
     return;
   }
   if (!time) { setFieldError('acm-time', 'Pick a start time.'); return; }
 
   // `subject` is deliberately NOT sent. The server derives it from the course, so
   // it is always a real Subject name. This used to be computed here as
-  // `c ? c.subject : course` — and that fallback wrote the COURSE TITLE into the
+  // `c ? c.subject : course` - and that fallback wrote the COURSE TITLE into the
   // subject field whenever the title lookup missed, producing schedule rows whose
   // "subject" matched nothing in the Subject collection.
   const payload = { courseId: Number(courseId), day, time, type, room, duration: Number(duration) };
@@ -3324,22 +3522,10 @@ async function submitAddClass() {
     closeAddClassModal();
     renderTeacherSchedule();
 
-    if (shouldNotify && course) {
-      try {
-        const notif = await apiFetch('/notifications', {
-          method: 'POST',
-          body: JSON.stringify({
-            type: 'schedule',
-            title: 'Schedule updated',
-            body: `${course.subject} class on ${day} at ${time} has been updated.`,
-          }),
-        });
-        NOTIFICATIONS.unshift(notif);
-        renderNotifBell();
-      } catch (err) { console.error('Failed to create notification:', err.message); }
-    }
+
     showToast('Schedule updated.');
   } catch (err) {
+  if (err.fieldErrors && err.fieldErrors.courseId) { err.fieldErrors.course = err.fieldErrors.courseId; delete err.fieldErrors.courseId; }
     const orphans = applyFieldErrors(err.fieldErrors, 'acm', 'add-class-modal');
     if (!err.fieldErrors || orphans.length) showToast(err.message);
   }
@@ -3365,8 +3551,14 @@ async function deleteClass() {
 }
 
 // ══════════════════════════════════════════════════
-//   20. ADMIN PAGES — full CRUD over students, teachers, batches, entry tests
+//   20. ADMIN PAGES - full CRUD over students, teachers, batches, entry tests
 // ══════════════════════════════════════════════════
+
+
+
+
+
+
 
 /** Renders the admin Students table, applying the search box + batch/fee/test filters. */
 function renderAdminStudents() {
@@ -3445,10 +3637,10 @@ function renderAdminStudents() {
       </td>
       <td style="font-family:var(--font-mono);font-size:0.76rem">${esc(s.rollNo)}</td>
       <td>${s.batch ? esc(s.batch) : '<span style="color:var(--text-light);font-size:0.76rem">not enrolled</span>'}</td>
-      <td>${s.entryTest ? `<span class="badge badge-blue" style="font-family:var(--font-mono)">${esc(s.entryTest)}</span>` : '—'}</td>
+      <td>${s.entryTest ? `<span class="badge badge-blue" style="font-family:var(--font-mono)">${esc(s.entryTest)}</span>` : '-'}</td>
       <td><span style="font-family:var(--font-mono);font-weight:600;color:${attColor}">${att}%</span></td>
       <td>
-        <span class="badge ${feeClass}">${esc(s.feeStatus || '—')}</span>
+        <span class="badge ${feeClass}">${esc(s.feeStatus || '-')}</span>
         <div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">
           ${balance > 0 ? 'Rs. ' + balance.toLocaleString() + ' due' : 'settled'}
         </div>
@@ -3475,19 +3667,19 @@ function openAdminStudentModal(sid) {
   const s = sid ? STUDENTS_DB.find(st => st.id === sid) : null;
   if (sid && !s) { showToast('That student is no longer in the list. Refresh the page.'); return; }
 
-  // Fill every dropdown at open time — see populateSelect() for why page-parse
+  // Fill every dropdown at open time - see populateSelect() for why page-parse
   // time doesn't work here.
-  populateSelect('asm-gender', V.GENDERS || ['Male', 'Female', 'Other'], { selected: s?.gender || '', placeholder: '— Select —' });
+  populateSelect('asm-gender', V.GENDERS || ['Male', 'Female', 'Other'], { selected: s?.gender || '', placeholder: '- Select -' });
   populateSelect('asm-feeStatus', V.FEE_STATUSES || ['Paid', 'Partial', 'Pending', 'Overdue'], {
     selected: s?.feeStatus || 'Pending', placeholder: null,
   });
   populateSelect('asm-batch', BATCHES.map(b => b.name), {
-    selected: s?.batch || '', placeholder: '— Not enrolled yet —',
-    emptyText: 'No batches yet — create one on the Batches page',
+    selected: s?.batch || '', placeholder: '- Not enrolled yet -',
+    emptyText: 'No batches yet - create one on the Batches page',
   });
   populateSelect('asm-entryTest', ENTRY_TESTS.map(t => t.name), {
-    selected: s?.entryTest || '', placeholder: '— None —',
-    emptyText: 'No entry tests yet — create one on the Entry Tests page',
+    selected: s?.entryTest || '', placeholder: '- None -',
+    emptyText: 'No entry tests yet - create one on the Entry Tests page',
   });
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val === null || val === undefined ? '' : val; };
@@ -3525,7 +3717,12 @@ function openAdminStudentModal(sid) {
     if (pwWrap) pwWrap.style.display = 'block';
   }
   syncEntryTestFromBatch();
+  const rb = document.getElementById('asm-reset-btn'); if (rb) rb.style.display = s ? 'inline-flex' : 'none';
+  const fb = document.getElementById('asm-fees-btn'); if (fb) fb.style.display = s ? 'inline-flex' : 'none';
+  const locked = !!(s && (s.fees || []).length);
+  ['asm-feeStatus', 'asm-totalFee', 'asm-paidAmount'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = locked; });
   modal.style.display = 'flex';
+
 }
 
 function closeAdminStudentModal() {
@@ -3586,8 +3783,8 @@ async function saveAdminStudent() {
 
   const password = fv('asm-password').trim();
   if (!id && password && password.length < 6) {
-    setFieldError('asm-password', 'Must be at least 6 characters, or leave blank.');
-    showToast('Password must be at least 6 characters, or leave it blank to generate one.');
+    setFieldError('asm-password', 'Must be at least 8 characters, or leave blank.');
+    showToast('Password must be at least 8 characters, or leave it blank to generate one.');
     return;
   }
 
@@ -3612,10 +3809,12 @@ async function saveAdminStudent() {
       renderAdminStudents();
       // `created` only exists in this branch. The old code read
       // created.tempPassword after the if/else, which threw a ReferenceError on
-      // every EDIT — and wrongly said "Student added" when updating.
-      showToast(created.tempPassword
-        ? `Student added. Temporary password: ${created.tempPassword} — copy it now, it can't be shown again.`
-        : 'Student added. They can log in with the password you set.');
+      // every EDIT - and wrongly said "Student added" when updating.
+      if (created.tempPassword) {
+        showCredentials({ title: 'Student account created', name: created.student.name, email: created.student.email, password: created.tempPassword });
+      } else {
+        showToast('Student added. They can log in with the password you set.');
+      }
     }
     // Enrolling into a batch changes that batch's studentIds server-side, so
     // pull the fresh copy instead of leaving the page showing a stale roster.
@@ -3686,7 +3885,7 @@ function renderAdminTeachers() {
   // form, so without escaping a name containing < or & mangles the row (and a
   // deliberately crafted one would inject markup into the admin's page).
   tbody.innerHTML = teachers.map(t => {
-    const courseNames = (t.courseIds || []).map(cid => COURSES[cid]?.title || COURSES[cid]?.subject).filter(Boolean).join(', ') || '—';
+    const courseNames = (t.courseIds || []).map(cid => COURSES[cid]?.title || COURSES[cid]?.subject).filter(Boolean).join(', ') || '-';
     const subjects = (t.subjects || []);
     return `<tr>
       <td>
@@ -3695,10 +3894,10 @@ function renderAdminTeachers() {
       </td>
       <td>${subjects.length
             ? subjects.map(s => `<span class="badge badge-blue" style="margin:0 0.2rem 0.2rem 0">${esc(s)}</span>`).join('')
-            : '<span class="badge badge-red">none — cannot be assigned</span>'}</td>
+            : '<span class="badge badge-red">none - cannot be assigned</span>'}</td>
       <td style="font-family:var(--font-mono);font-size:0.76rem">${esc(t.phone)}</td>
       <td style="font-size:0.78rem;color:var(--text-mid)">
-        ${esc(t.qualification || '—')}${t.experience ? ` · ${esc(t.experience)}y` : ''}
+        ${esc(t.qualification || '-')}${t.experience ? ` · ${esc(t.experience)}y` : ''}
         <div style="font-size:0.7rem;color:var(--text-light)">${esc(courseNames)}</div>
       </td>
       <td><span class="badge ${t.status === 'active' ? 'badge-green' : 'badge-orange'}">${esc(t.status)}</span></td>
@@ -3714,16 +3913,17 @@ function renderAdminTeachers() {
 /**
  * joinDate is now stored as a sortable ISO date ('2026-08-30') instead of a
  * locale string ('Aug 30, 2026'), because the old format sorted alphabetically
- * — 'Apr' before 'Jan' — in every list that ordered by it. Format for display
+ * - 'Apr' before 'Jan' - in every list that ordered by it. Format for display
  * here, keeping any legacy value readable as-is.
  */
 function fmtJoinDate(v) {
-  if (!v) return '—';
-  const s = String(v);
-  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;   // legacy locale string
-  const d = new Date(s + 'T00:00:00');
-  if (isNaN(d.getTime())) return s;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // if (!v) return '-';
+  // const s = String(v);
+  // if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;   // legacy locale string
+  // const d = new Date(s + 'T00:00:00');
+  // if (isNaN(d.getTime())) return s;
+  // return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return fmtDate(v);
 }
 
 /**
@@ -3731,7 +3931,7 @@ function fmtJoinDate(v) {
  *
  * Every dropdown is filled HERE rather than at page load, because SUBJECTS_DB /
  * QUALIFICATIONS are empty until loadAppData() has resolved. The option lists
- * come from window.MRValidate — the same arrays the server validates against —
+ * come from window.MRValidate - the same arrays the server validates against -
  * so the form physically cannot offer a value the API will reject.
  */
 function openAdminTeacherModal(tid) {
@@ -3748,10 +3948,10 @@ function openAdminTeacherModal(tid) {
   if (tid && !t) { showToast('That teacher is no longer in the list. Refresh the page.'); return; }
 
   populateSelect('atm-gender', V.GENDERS || ['Male', 'Female', 'Other'], {
-    selected: t?.gender || '', placeholder: '— Select —',
+    selected: t?.gender || '', placeholder: '- Select -',
   });
   populateSelect('atm-qualification', V.QUALIFICATIONS || [], {
-    selected: t?.qualification || '', placeholder: '— Select —',
+    selected: t?.qualification || '', placeholder: '- Select -',
   });
   populateSelect('atm-status', [
     { value: 'active', label: 'Active' },
@@ -3788,6 +3988,7 @@ function openAdminTeacherModal(tid) {
       .forEach(id => set(id, ''));
     if (pwWrap) pwWrap.style.display = 'block';
   }
+  const rb = document.getElementById('atm-reset-btn'); if (rb) rb.style.display = t ? 'inline-flex' : 'none';
   modal.style.display = 'flex';
 }
 
@@ -3802,7 +4003,7 @@ function closeAdminTeacherModal() {
  *
  * Validation runs twice on purpose: once here through MRValidate.TEACHER_RULES
  * so the admin gets a message under the exact field that's wrong, and again on
- * the server with the identical rule set. The client pass is convenience only —
+ * the server with the identical rule set. The client pass is convenience only -
  * skipping it (or calling the API directly) changes nothing about what gets
  * stored.
  */
@@ -3837,15 +4038,15 @@ async function saveAdminTeacher() {
   const subjects = readSubjectCheckboxes('atm-subject-cb');
   if (!subjects.length) {
     setFieldError('atm-subjects', 'Select at least one subject.');
-    showToast('Select at least one subject — a teacher with none can never be assigned to a course.');
+    showToast('Select at least one subject - a teacher with none can never be assigned to a course.');
     return;
   }
   values.subjects = subjects;
 
   const password = fv('atm-password').trim();
-  if (!id && password && password.length < 6) {
-    setFieldError('atm-password', 'Must be at least 6 characters, or leave blank.');
-    showToast('Password must be at least 6 characters, or leave it blank to generate one.');
+  if (!id && password && password.length < 8) {
+    setFieldError('atm-password', 'Must be at least 8 characters, or leave blank.');
+    showToast('Password must be at least 8 characters, or leave it blank to generate one.');
     return;
   }
 
@@ -3868,11 +4069,13 @@ async function saveAdminTeacher() {
       TEACHERS_DB.push(created.teacher);
       closeAdminTeacherModal();
       renderAdminTeachers();
-      // The generated password is shown exactly once and never again — it's
+      // The generated password is shown exactly once and never again - it's
       // hashed on the way in and select:false on the way out.
-      showToast(created.tempPassword
-        ? `Teacher added. Temporary password: ${created.tempPassword} — copy it now, it can't be shown again.`
-        : 'Teacher added. They can log in with the password you set.');
+      if (created.tempPassword) {
+        showCredentials({ title: 'Teacher account created', name: created.teacher.name, email: created.teacher.email, password: created.tempPassword });
+      } else {
+        showToast('Teacher added. They can log in with the password you set.');
+      }
     }
   } catch (err) {
     // The API returns { message, errors: {field: why} }. Painting those inline
@@ -3915,13 +4118,13 @@ async function deleteTeacher(tid) {
   closeAdminTeacherModal();
   // Batches may have lost an assignment, so refresh them from the server
   // rather than trusting the copy in memory.
-  try { BATCHES = await apiFetch('/batches'); } catch (e) { /* table still renders */ }
+  await refreshCourseRelatedData();
   renderAdminTeachers();
   showToast('Teacher removed.');
 }
 
 // ──────────────────────────────────────────────────
-// ADMIN — SUBJECT MANAGEMENT
+// ADMIN - SUBJECT MANAGEMENT
 //
 // Subjects are the root of the chain that decides whether a course is visible
 // to anybody at all:
@@ -3930,7 +4133,7 @@ async function deleteTeacher(tid) {
 //           -> Teacher.subjects[]   -> Batch.subjectTeachers{subject: teacherId}
 //
 // Every link is exact, case-sensitive string equality, and a mismatch is
-// completely silent — the course just stops appearing, for the student, the
+// completely silent - the course just stops appearing, for the student, the
 // teacher, or both, with nothing logged. So this card does three things
 // deliberately:
 //
@@ -3943,13 +4146,104 @@ async function deleteTeacher(tid) {
 //      name back into the next dropdown.
 // ──────────────────────────────────────────────────
 
+window._feeRows = [];
+window._feeStudentId = null;
+
+function openFeeInstalments() {
+  const id = fv('asm-id');
+  const s = STUDENTS_DB.find(x => x.id === id);
+  if (!s) { showToast('Save the student first, then add instalments.'); return; }
+  window._feeStudentId = id;
+  window._feeRows = (s.fees || []).map(f => ({ label: f.label, amount: f.amount, dueDate: f.dueDate, paid: f.status === 'Paid' }));
+  if (!window._feeRows.length) window._feeRows.push({ label: 'Instalment 1', amount: '', dueDate: '', paid: false });
+
+  let m = document.getElementById('fee-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'fee-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:1500;backdrop-filter:blur(2px);padding:1rem';
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg)">
+      <div style="padding:1.1rem 1.4rem;border-bottom:1px solid var(--border)">
+        <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.07em">Fee instalments</div>
+        <div style="font-weight:600">${esc(s.name)}</div>
+      </div>
+      <div style="padding:1rem 1.4rem;overflow-y:auto">
+        <div id="fee-rows"></div>
+        <button class="btn btn-outline btn-sm" onclick="addFeeRow()" style="margin-top:0.5rem">+ Add instalment</button>
+        <div id="fee-totals" style="margin-top:0.85rem;font-size:0.78rem;font-family:var(--font-mono);color:var(--text-mid)"></div>
+      </div>
+      <div style="padding:0.9rem 1.4rem;border-top:1px solid var(--border);display:flex;gap:0.65rem;justify-content:flex-end">
+        <button class="btn btn-ghost btn-sm" onclick="closeFeeInstalments()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="saveFeeInstalments()">Save Instalments</button>
+      </div>
+    </div>`;
+  m.style.display = 'flex';
+  renderFeeRows();
+}
+
+function closeFeeInstalments() {
+  const m = document.getElementById('fee-modal');
+  if (m) m.style.display = 'none';
+}
+
+function renderFeeRows() {
+  const box = document.getElementById('fee-rows');
+  if (!box) return;
+  box.innerHTML = window._feeRows.map((r, i) => `
+    <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr auto auto;gap:0.5rem;align-items:center;margin-bottom:0.5rem">
+      <input type="text" class="form-control" value="${esc(r.label)}" maxlength="60" placeholder="Name" oninput="feeRowChanged(${i},'label',this.value)">
+      <input type="number" class="form-control" value="${esc(r.amount)}" min="1" placeholder="Amount (Rs.)" oninput="feeRowChanged(${i},'amount',this.value)">
+      <input type="date" class="form-control" value="${esc(r.dueDate)}" onchange="feeRowChanged(${i},'dueDate',this.value)">
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;white-space:nowrap"><input type="checkbox" ${r.paid ? 'checked' : ''} onchange="feeRowChanged(${i},'paid',this.checked)"> Paid</label>
+      <button class="btn btn-danger btn-sm" onclick="removeFeeRow(${i})" style="padding:0.3rem 0.5rem">&#215;</button>
+    </div>`).join('');
+  feeRowChanged(0, null, null);
+}
+
+function feeRowChanged(i, key, val) {
+  if (key && window._feeRows[i]) window._feeRows[i][key] = val;
+  const num = r => parseInt(r.amount, 10) || 0;
+  const total = window._feeRows.reduce((a, r) => a + num(r), 0);
+  const paid  = window._feeRows.filter(r => r.paid).reduce((a, r) => a + num(r), 0);
+  const el = document.getElementById('fee-totals');
+  if (el) el.textContent = `Total Rs. ${total.toLocaleString()}  ·  Paid Rs. ${paid.toLocaleString()}  ·  Remaining Rs. ${(total - paid).toLocaleString()}`;
+}
+
+function addFeeRow() {
+  window._feeRows.push({ label: 'Instalment ' + (window._feeRows.length + 1), amount: '', dueDate: '', paid: false });
+  renderFeeRows();
+}
+function removeFeeRow(i) { window._feeRows.splice(i, 1); renderFeeRows(); }
+
+async function saveFeeInstalments() {
+  try {
+    const updated = await apiFetchDetailed(`/students/${encodeURIComponent(window._feeStudentId)}/fees`, {
+      method: 'PUT', body: JSON.stringify({ fees: window._feeRows }),
+    });
+    const idx = STUDENTS_DB.findIndex(x => x.id === updated.id);
+    if (idx !== -1) STUDENTS_DB[idx] = updated;
+    closeFeeInstalments();
+    closeAdminStudentModal();
+    renderAdminStudents();
+    showToast('Fee instalments saved.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+
+
+
 // Which row is currently in inline-rename mode (a subject _id), or null.
 window._renamingSubjectId = null;
 
 /**
  * Renders the subject table. Fetches with ?withUsage=true rather than reusing
  * SUBJECTS_DB, because the usage counts only come back from that query and they
- * are the whole point of the card — deleting a subject blind is how a batch
+ * are the whole point of the card - deleting a subject blind is how a batch
  * loses a teacher slot.
  */
 async function renderAdminSubjects() {
@@ -3968,7 +4262,7 @@ async function renderAdminSubjects() {
   SUBJECTS_DB = subjects.map(s => ({ _id: s._id, name: s.name, isCore: s.isCore }));
 
   if (!subjects.length) {
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1.25rem;color:var(--text-light)">No subjects yet. Add one above — entry tests and courses cannot be created without at least one.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:1.25rem;color:var(--text-light)">No subjects yet. Add one above - entry tests and courses cannot be created without at least one.</td></tr>';
     return;
   }
 
@@ -3977,7 +4271,7 @@ async function renderAdminSubjects() {
     const id = String(s._id);
 
     // Usage is rendered as one badge per kind, with the actual names in the
-    // title attribute. A bare number ("3 courses") isn't enough to act on —
+    // title attribute. A bare number ("3 courses") isn't enough to act on -
     // you need to know WHICH course you're about to hide.
     const bits = [];
     if (u.courses.length)    bits.push(`<span class="badge badge-blue"  title="${escAttr(u.courses.join(', '))}">${u.courses.length} course${u.courses.length > 1 ? 's' : ''}</span>`);
@@ -3986,7 +4280,7 @@ async function renderAdminSubjects() {
     if (u.batches.length)    bits.push(`<span class="badge badge-orange" title="${escAttr(u.batches.join(', '))}">${u.batches.length} batch${u.batches.length > 1 ? 'es' : ''}</span>`);
     const usageCell = bits.length
       ? `<div style="display:flex;flex-wrap:wrap;gap:4px">${bits.join('')}</div>`
-      : '<span style="font-size:0.72rem;color:var(--text-light)">nothing yet — safe to remove</span>';
+      : '<span style="font-size:0.72rem;color:var(--text-light)">nothing yet - safe to remove</span>';
 
     // Rename mode swaps just the name cell for an input, so the usage column
     // stays visible while you're deciding.
@@ -4027,7 +4321,7 @@ async function renderAdminSubjects() {
 
 /**
  * Re-pulls everything a subject name is embedded in. Called after a rename or a
- * forced delete, both of which rewrite strings inside other collections — without
+ * forced delete, both of which rewrite strings inside other collections - without
  * this, the page keeps rendering the old spelling and the next dropdown built
  * from memory would reintroduce it.
  */
@@ -4048,6 +4342,22 @@ async function refreshSubjectDependentData() {
     console.error('Could not refresh subject-dependent data:', err.message);
   }
 }
+
+
+/** Re-pulls everything a course/batch change can touch on the server. */
+async function refreshCourseRelatedData() {
+  try {
+    const [courseList, students, teachers, batches] = await Promise.all([
+      apiFetch('/courses'), apiFetch('/students'), apiFetch('/teachers'), apiFetch('/batches'),
+    ]);
+    COURSES = {};
+    courseList.forEach(c => { COURSES[c.id] = c; });
+    STUDENTS_DB = students; TEACHERS_DB = teachers; BATCHES = batches;
+  } catch (err) {
+    console.error('Could not refresh course data:', err.message);
+  }
+}
+
 
 async function addSubject() {
   const inp = document.getElementById('new-subject-name');
@@ -4070,7 +4380,7 @@ async function addSubject() {
     renderTestTags();               // refills the "Subjects Taught" dropdown
     showToast(`Subject "${created.name}" added.`);
   } catch (err) {
-    // 409 means a case-variant already exists — the server tells us which, and
+    // 409 means a case-variant already exists - the server tells us which, and
     // that message is more useful than "duplicate".
     setFieldError('new-subject-name', (err.fieldErrors && err.fieldErrors.name) || err.message);
   } finally {
@@ -4158,7 +4468,7 @@ async function deleteSubject(id, name) {
 }
 
 // ──────────────────────────────────────────────────
-// ADMIN — ENTRY TEST MANAGEMENT
+// ADMIN - ENTRY TEST MANAGEMENT
 // ──────────────────────────────────────────────────
 //
 // renderAdminTests() used to live here. It guarded on `#admin-tests-container`,
@@ -4183,18 +4493,18 @@ function openEditTestSubjects(tid) {
   modal.innerHTML = `
     <div style="background:var(--white);border-radius:var(--radius-xl);padding:1.75rem;width:100%;max-width:420px;box-shadow:var(--shadow-lg);border:1px solid var(--border)">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-        <h3 style="font-size:1rem;font-weight:600">${esc(test.name)} — Subjects</h3>
+        <h3 style="font-size:1rem;font-weight:600">${esc(test.name)} - Subjects</h3>
         <button onclick="closeEditTestSubjects()" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-light)">&#215;</button>
       </div>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
         <select class="form-control" id="edit-test-subject-inp" style="flex:1">
-          <option value="">— Choose subject —</option>
+          <option value="">- Choose subject -</option>
           ${subjectNames().map(n => `<option value="${escAttr(n)}">${esc(n)}</option>`).join('')}
         </select>
         <button class="btn btn-outline btn-sm" onclick="addSubjectToEditTest()">Add</button>
       </div>
       <div id="edit-test-subjects-list" style="display:flex;flex-wrap:wrap;gap:6px;min-height:36px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);margin-bottom:1rem"></div>
-      <span class="field-hint" style="display:block;margin-bottom:1rem">Removing a subject that still has courses under it will be refused — the courses would vanish for everyone.</span>
+      <span class="field-hint" style="display:block;margin-bottom:1rem">Removing a subject that still has courses under it will be refused - the courses would vanish for everyone.</span>
       <div style="display:flex;gap:0.65rem;justify-content:flex-end">
         <button class="btn btn-ghost btn-sm" onclick="closeEditTestSubjects()">Cancel</button>
         <button class="btn btn-primary btn-sm" onclick="saveEditTestSubjects()">Save</button>
@@ -4223,7 +4533,7 @@ function renderEditTestSubjectTags() {
   const el = document.getElementById('edit-test-subjects-list');
   if (!el) return;
   if (!window._editTestSubjects.length) {
-    el.innerHTML = '<span style="font-size:0.72rem;color:var(--text-light)">No subjects — this test cannot hold any courses.</span>';
+    el.innerHTML = '<span style="font-size:0.72rem;color:var(--text-light)">No subjects - this test cannot hold any courses.</span>';
     return;
   }
   el.innerHTML = window._editTestSubjects.map(s => `
@@ -4236,24 +4546,10 @@ function renderEditTestSubjectTags() {
 async function saveEditTestSubjects() {
   const test = ENTRY_TESTS.find(t => t.id === window._editingTestId);
   if (!test) { closeEditTestSubjects(); return; }
-
-  // PUT /tests/:id/subjects answers 409 with a warning when a removal would
-  // orphan courses. Surface it and let the admin confirm rather than silently
-  // hiding somebody's course.
-  const send = async (force) => apiFetchDetailed(
-    `/tests/${test.id}/subjects${force ? '?force=true' : ''}`,
-    { method: 'PUT', body: JSON.stringify({ subjects: [...window._editTestSubjects] }) },
-  );
-
   try {
-    let updated;
-    try {
-      updated = await send(false);
-    } catch (err) {
-      if (err.status !== 409) throw err;
-      if (!confirm(`${err.message}\n\nApply anyway?`)) return;
-      updated = await send(true);
-    }
+    const updated = await apiFetchDetailed(`/tests/${test.id}/subjects`, {
+      method: 'PUT', body: JSON.stringify({ subjects: [...window._editTestSubjects] }),
+    });
     const idx = ENTRY_TESTS.findIndex(t => t.id === test.id);
     if (idx !== -1) ENTRY_TESTS[idx] = updated.entryTest || updated;
     renderTestTags();
@@ -4296,9 +4592,9 @@ function renderTestTags() {
   if (subjSel) {
     const names = subjectNames();
     subjSel.innerHTML = names.length
-      ? '<option value="">— Choose subject —</option>' +
+      ? '<option value="">- Choose subject -</option>' +
         names.map(n => `<option value="${escAttr(n)}">${esc(n)}</option>`).join('')
-      : '<option value="">No subjects yet — add one above first</option>';
+      : '<option value="">No subjects yet - add one above first</option>';
     renderNewTestSubjectTags();
   }
 
@@ -4315,7 +4611,7 @@ function renderTestTags() {
           <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">
             ${subs.length
               ? subs.map(s => `<span class="badge badge-blue" style="font-size:0.65rem">${esc(s)}</span>`).join('')
-              : '<span class="badge badge-red" style="font-size:0.65rem">none — no course can use this test</span>'}
+              : '<span class="badge badge-red" style="font-size:0.65rem">none - no course can use this test</span>'}
             <button onclick="openEditTestSubjects('${escAttr(t.id)}')" style="background:none;border:1px dashed var(--border);border-radius:3px;font-size:0.65rem;padding:1px 6px;cursor:pointer;color:var(--text-light)">edit</button>
           </div>
         </td>
@@ -4337,13 +4633,13 @@ async function addTest() {
   clearFieldErrors('add-test-card');
   if (!nameEl.value.trim()) { setFieldError('new-test-name', 'Enter a program name.'); return; }
   if (!window._newTestSubjects || !window._newTestSubjects.length) {
-    setFieldError('new-test-subject-inp', 'Pick at least one subject — a test with no subjects can hold no courses.');
+    setFieldError('new-test-subject-inp', 'Pick at least one subject - a test with no subjects can hold no courses.');
     return;
   }
 
   // No `color` here on purpose. This used to send a client-picked colour from a
   // local palette indexed by ENTRY_TESTS.length, which (a) collided as soon as
-  // one test was deleted and re-added, and (b) was thrown away regardless —
+  // one test was deleted and re-added, and (b) was thrown away regardless -
   // routes/tests.js only accepts name, desc and subjects, and assigns the colour
   // itself. Sending it just made the client look like it was in control.
   const payload = {
@@ -4400,7 +4696,7 @@ async function removeTest(id) {
 // 21. LOGIN
 // ──────────────────────────────────────────────────
 //
-// setupLogin() used to live here. It was dead code — it looked for
+// setupLogin() used to live here. It was dead code - it looked for
 // `#login-form` and `#login-error`, neither of which exists in any HTML file in
 // this project (login.html uses a plain div layout with a button calling
 // doLogin(), plus `#login-err`). So it bailed on its own second line, every
@@ -4431,9 +4727,9 @@ function renderBatchTeacherSlots() {
   const slots = document.getElementById('abm-teacher-slots');
   if (!slots) return;
 
-  const testId   = document.getElementById('abm-entry-test')?.value;
-  const test     = ENTRY_TESTS.find(t => t.id === testId);
-  const subjects = test?.subjects || [];
+  const test     = ENTRY_TESTS.find(t => t.id === fv('abm-entry-test'));
+  const subjects = (test && test.subjects) || [];
+  const editing  = BATCHES.find(b => b.id === fv('abm-id'));
 
   if (!subjects.length) {
     slots.innerHTML = '<div style="padding:0.75rem;font-size:0.78rem;color:var(--text-light)">No subjects defined for this entry test. Add subjects in Entry Tests first.</div>';
@@ -4441,14 +4737,14 @@ function renderBatchTeacherSlots() {
   }
 
   slots.innerHTML = subjects.map((sub, i) => {
-    const teachers = TEACHERS_DB.filter(t => t.status === 'active' && (t.subjects || []).includes(sub));
-    const borderTop = i > 0 ? 'border-top:1px solid var(--border);' : '';
+    const current = editing && editing.subjectTeachers ? editing.subjectTeachers[sub] : '';
+    const teachers = TEACHERS_DB.filter(t => (t.subjects || []).includes(sub) && (t.status === 'active' || t.id === current));
     return `
-      <div style="display:grid;grid-template-columns:120px 1fr;align-items:center;gap:0.75rem;padding:0.6rem 0.85rem;${borderTop}background:var(--white)">
-        <div style="font-size:0.82rem;font-weight:600;color:var(--text-dark)">${sub}</div>
-        <select class="form-control" id="slot-${sub.replace(/\s+/g, '_')}" style="height:34px;font-size:0.82rem">
-          <option value="">— Select teacher —</option>
-          ${teachers.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+      <div style="display:grid;grid-template-columns:120px 1fr;align-items:center;gap:0.75rem;padding:0.6rem 0.85rem;${i > 0 ? 'border-top:1px solid var(--border);' : ''}background:var(--white)">
+        <div style="font-size:0.82rem;font-weight:600;color:var(--text-dark)">${esc(sub)}</div>
+        <select class="form-control" id="slot-${esc(sub.replace(/\s+/g, '_'))}" style="height:34px;font-size:0.82rem">
+          <option value="">- Select teacher -</option>
+          ${teachers.map(t => `<option value="${esc(t.id)}">${esc(t.name)}${t.status === 'active' ? '' : ' (inactive)'}</option>`).join('')}
         </select>
       </div>`;
   }).join('');
@@ -4468,7 +4764,7 @@ function renderBatchTeacherSlots() {
 // It was deleted rather than left in place because it was actively harmful:
 //
 //  1. It was the last place in the whole project where a user could type a
-//     subject name as free text — `<input type="text" id="new-test-subject-inp"
+//     subject name as free text - `<input type="text" id="new-test-subject-inp"
 //     placeholder="e.g. Biology">`. Its own render hook tried to fix that by
 //     assigning `.innerHTML` to that element, which does nothing at all on an
 //     <input>. So arbitrary strings could reach EntryTest.subjects, and since
@@ -4476,13 +4772,13 @@ function renderBatchTeacherSlots() {
 //     would silently match nothing.
 //
 //  2. It was the source of several phantom element ids that app.js still read
-//     but no live page contained — `asm-password`, `atm-subjects-list` — which
+//     but no live page contained - `asm-password`, `atm-subjects-list` - which
 //     is why the Add Student and Save Teacher buttons threw a TypeError and
 //     failed 100% of the time. Those ids now exist in the real .html files.
 //
 //  3. It was still reachable. `initAdminSPA()` fired on any page containing
-//     `id="page-content"`, and Student/index.html — a stale copy of the old
-//     admin shell — still had it, so admin templates were being injected into
+//     `id="page-content"`, and Student/index.html - a stale copy of the old
+//     admin shell - still had it, so admin templates were being injected into
 //     the student shell.
 //
 // If you need to add an admin screen, create a real .html file modelled on
@@ -4493,14 +4789,14 @@ function renderBatchTeacherSlots() {
 // The old renderTeacherSubjectCheckboxes() lived here. It has been replaced by
 // the generic renderSubjectCheckboxes(containerId, selected, cssClass) in the
 // shared-helpers section near the top of this file, which the batch form uses
-// too — one implementation instead of two that could drift. It also read the id
+// too - one implementation instead of two that could drift. It also read the id
 // `atm-subjects-list`, which existed in no live HTML file, so Save Teacher threw
 // a TypeError and failed on every attempt.
 
 
 /**
  * A batch already belongs to an entry test, so once a batch is chosen the entry
- * test is decided — leaving it editable let an admin file a student under MDCAT
+ * test is decided - leaving it editable let an admin file a student under MDCAT
  * while their batch prepared for ECAT, and nothing downstream reconciled the
  * two.
  *
@@ -4513,18 +4809,8 @@ function syncEntryTestFromBatch() {
   const etSel = document.getElementById('asm-entryTest');
   if (!bSel || !etSel) return;
   const batch = BATCHES.find(b => b.name === bSel.value);
-  if (batch && batch.entryTest) {
-    // Only force the value if the batch's entry test is actually one of the
-    // options — otherwise the assignment is a silent no-op and the select keeps
-    // whatever was there, which is worse than leaving it editable.
-    const hasOption = [...etSel.options].some(o => o.value === batch.entryTest);
-    if (hasOption) {
-      etSel.value = batch.entryTest;
-      etSel.disabled = true;
-      return;
-    }
-  }
-  etSel.disabled = false;
+  etSel.value = batch && [...etSel.options].some(o => o.value === batch.entryTest) ? batch.entryTest : '';
+  etSel.disabled = true;
 }
 
 
@@ -4536,7 +4822,7 @@ function renderAdminBatches() {
   if (statsEl) {
     const active   = BATCHES.filter(b => b.status === 'active').length;
     const upcoming = BATCHES.filter(b => b.status === 'upcoming').length;
-    const totalS   = [...new Set(BATCHES.flatMap(b => b.studentIds))].length;
+    const totalS   = [...new Set(BATCHES.flatMap(b => b.studentIds || []))].length;
     statsEl.innerHTML = `
       <div class="stat-card"><div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">B</div><div class="stat-info"><div class="sv">${BATCHES.length}</div><div class="sl">Total Batches</div></div></div>
       <div class="stat-card"><div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">A</div><div class="stat-info"><div class="sv">${active}</div><div class="sl">Active</div></div></div>
@@ -4546,57 +4832,61 @@ function renderAdminBatches() {
 
   const grid = document.getElementById('admin-batches-grid');
   if (!grid) return;
-  grid.innerHTML = '';
   if (!BATCHES.length) {
     grid.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-light);font-size:0.85rem;border:1px dashed var(--border);border-radius:var(--radius-lg)">No batches yet.</div>';
     return;
   }
 
-  BATCHES.forEach(b => {
-    // Support both the old single `teacherId` field and the current `teacherIds` array,
-    // in case some batches were created before multi-teacher batches existed.
-    const teacherIds = b.teacherIds || (b.teacherId ? [b.teacherId] : []);
-    const teachers   = TEACHERS_DB.filter(t => teacherIds.includes(t.id));
-    const students   = STUDENTS_DB.filter(s => b.studentIds.includes(s.id));
-    const test       = ENTRY_TESTS.find(t => t.name === b.entryTest);
-    const testColor  = test?.color || 'var(--blue)';
+  grid.innerHTML = BATCHES.map(b => {
+    const test = ENTRY_TESTS.find(t => t.id === b.entryTestId) || ENTRY_TESTS.find(t => t.name === b.entryTest);
+    const testColor = (test && test.color) || '#1B5FAD';
+    const subjects = (test && test.subjects) || [];
+    const students = STUDENTS_DB.filter(s => (b.studentIds || []).includes(s.id));
+    const courseCount = Object.values(COURSES).filter(c => c.batchId === b.id).length;
 
-    grid.innerHTML += `
-      <div class="card" style="border-top:3px solid ${testColor}">
+    const staffRows = subjects.map(sub => {
+      const tid = b.subjectTeachers && b.subjectTeachers[sub];
+      const t = tid ? teacherFromRef(tid) : null;
+      return `<div style="font-size:0.8rem;display:flex;justify-content:space-between;gap:8px;margin-bottom:3px">
+        <span style="color:var(--text-mid)">${esc(sub)}</span>
+        ${t ? `<span style="font-weight:500">${esc(t.name)}</span>` : '<span style="color:var(--danger);font-size:0.72rem">no teacher</span>'}
+      </div>`;
+    }).join('') || '<div style="font-size:0.78rem;color:var(--text-light)">This entry test has no subjects.</div>';
+
+    return `
+      <div class="card" style="border-top:3px solid ${escAttr(testColor)}">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:0.85rem">
           <div>
-            <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:3px">${b.name}</div>
+            <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:3px">${esc(b.name)}</div>
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              <span class="badge" style="background:${testColor}22;color:${testColor}">${b.entryTest}</span>
-              <span class="badge ${b.status === 'active' ? 'badge-green' : 'badge-orange'}">${b.status}</span>
+              <span class="badge" style="background:${escAttr(testColor)}22;color:${escAttr(testColor)}">${esc(b.entryTest)}</span>
+              <span class="badge ${b.status === 'active' ? 'badge-green' : b.status === 'completed' ? 'badge-navy' : 'badge-orange'}">${esc(b.status)}</span>
             </div>
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="openAdminBatchModal('${b.id}')">Edit</button>
+          <button class="btn btn-ghost btn-sm" onclick="openAdminBatchModal('${escAttr(b.id)}')">Edit</button>
         </div>
         <div style="margin-bottom:0.85rem">
-          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-light);margin-bottom:0.35rem">Teachers</div>
-          ${teachers.length ? teachers.map(t =>
-            `<div style="font-size:0.8rem;display:flex;align-items:center;gap:6px;margin-bottom:3px">
-              <span style="font-weight:500">${t.name}</span>
-              <span style="color:var(--text-light);font-size:0.72rem">· ${t.subject}</span>
-            </div>`).join('') : '<div style="font-size:0.78rem;color:var(--text-light)">No teachers assigned</div>'}
+          <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-light);margin-bottom:0.35rem">Subjects &amp; teachers</div>
+          ${staffRows}
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:1rem">
           <div style="font-size:0.78rem;color:var(--text-mid)">Start Date</div>
-          <div style="font-size:0.78rem;font-family:var(--font-mono)">${b.startDate}</div>
+          <div style="font-size:0.78rem;font-family:var(--font-mono)">${esc(fmtDate(b.startDate))}</div>
           <div style="font-size:0.78rem;color:var(--text-mid)">Students</div>
           <div style="font-size:0.78rem;font-family:var(--font-mono);font-weight:600">${students.length}</div>
+          <div style="font-size:0.78rem;color:var(--text-mid)">Courses created</div>
+          <div style="font-size:0.78rem;font-family:var(--font-mono);font-weight:600">${courseCount} of ${subjects.length}</div>
         </div>
         ${students.length ? `
         <div style="border-top:1px solid var(--border);padding-top:0.75rem">
           <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-light);margin-bottom:0.4rem">Enrolled</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px">
-            ${students.slice(0, 4).map(s => `<span class="badge badge-blue" style="font-size:0.65rem">${s.name.split(' ')[0]}</span>`).join('')}
+            ${students.slice(0, 4).map(s => `<span class="badge badge-blue" style="font-size:0.65rem">${esc(firstName(s.name))}</span>`).join('')}
             ${students.length > 4 ? `<span class="badge badge-navy">+${students.length - 4}</span>` : ''}
           </div>
-        </div>` : `<div style="border-top:1px solid var(--border);padding-top:0.75rem;font-size:0.78rem;color:var(--text-light)">No students enrolled yet.</div>`}
+        </div>` : '<div style="border-top:1px solid var(--border);padding-top:0.75rem;font-size:0.78rem;color:var(--text-light)">No students enrolled yet.</div>'}
       </div>`;
-  });
+  }).join('');
 }
 
 /** Opens the admin Add/Edit Batch modal, restoring saved subject-teacher assignments and student checkboxes if editing. */
@@ -4609,16 +4899,22 @@ function openAdminBatchModal(bid) {
   if (etSel) etSel.innerHTML = ENTRY_TESTS.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
   const sList = document.getElementById('abm-student-list');
   if (sList) {
-    sList.innerHTML = STUDENTS_DB.length
-      ? STUDENTS_DB.map(s => `
+    const editingBatch = bid ? BATCHES.find(x => x.id === bid) : null;
+    const available = STUDENTS_DB.filter(s => {
+      const inOtherRoster   = BATCHES.some(b => b.id !== bid && (b.studentIds || []).includes(s.id));
+      const labelledElsewhere = s.batch && (!editingBatch || s.batch !== editingBatch.name);
+      return !inOtherRoster && !labelledElsewhere;
+    });
+    sList.innerHTML = available.length
+      ? available.map(s => `
           <div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.5rem;border-radius:4px">
-            <input type="checkbox" id="scb-${s.id}" value="${s.id}">
-            <label for="scb-${s.id}" style="cursor:pointer;font-size:0.82rem;flex:1">
-              <strong>${s.name}</strong>
-              <span style="color:var(--text-light);font-family:var(--font-mono);font-size:0.7rem;margin-left:6px">${s.rollNo}</span>
+            <input type="checkbox" id="scb-${esc(s.id)}" value="${esc(s.id)}">
+            <label for="scb-${esc(s.id)}" style="cursor:pointer;font-size:0.82rem;flex:1">
+              <strong>${esc(s.name)}</strong>
+              <span style="color:var(--text-light);font-family:var(--font-mono);font-size:0.7rem;margin-left:6px">${esc(s.rollNo)}</span>
             </label>
           </div>`).join('')
-      : '<div style="color:var(--text-light);font-size:0.78rem;padding:0.5rem">No students in database.</div>';
+      : '<div style="color:var(--text-light);font-size:0.78rem;padding:0.5rem">No unassigned students available.</div>';
   }
 
   const titleEl = document.getElementById('abm-modal-title');
@@ -4667,12 +4963,16 @@ function closeAdminBatchModal() {
 }
 
 
+
+
+
+
 // ── Admin: Dashboard ──────────────────────────────────────────────────────
 // Backs public/Admin/dashboard.html (router trigger: #admin-overview).
 //
 // This function previously existed ONLY inside dashboard.html's inline
 // <script> block. When that block was commented out to fix the inline-script
-// shadowing bug, the definition disappeared with it — but the router in §16
+// shadowing bug, the definition disappeared with it - but the router in §16
 // still calls renderAdminDashboard(), so the page threw a ReferenceError and
 // rendered nothing. This is the real, backend-driven replacement: it reads the
 // globals loadAppData() populates instead of localStorage.
@@ -4713,13 +5013,11 @@ function renderAdminDashboard() {
       rsEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1rem;font-size:0.82rem">No students yet.</td></tr>';
     } else {
       rsEl.innerHTML = students.slice(0, 5).map(s => {
-        const feeClass = s.feeStatus === 'Paid' ? 'badge-green'
-                       : s.feeStatus === 'Partially Paid' ? 'badge-orange'
-                       : 'badge-red';
+        const feeClass = feeBadgeClass(s.feeStatus);
         return `<tr>
-            <td><strong>${s.name}</strong><div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">${s.email}</div></td>
-            <td style="font-family:var(--font-mono);font-size:0.76rem">${s.rollNo}</td>
-            <td>${s.batch || '—'}</td>
+            <td><strong>${esc(s.name)}</strong><div style="font-size:0.7rem;color:var(--text-light);font-family:var(--font-mono)">${esc(s.email)}</div></td>
+            <td style="font-family:var(--font-mono);font-size:0.76rem">${esc(s.rollNo)}</td>
+            <td>${esc(s.batch) || '-'}</td>
             <td><span class="badge ${feeClass}">${s.feeStatus}</span></td>
           </tr>`;
       }).join('');
@@ -4729,13 +5027,13 @@ function renderAdminDashboard() {
   const bsEl = document.getElementById('admin-batch-summary');
   if (bsEl) {
     if (!batches.length) {
-      bsEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1rem;font-size:0.82rem">No batches yet — create one from the Batches page.</td></tr>';
+      bsEl.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-light);padding:1rem;font-size:0.82rem">No batches yet - create one from the Batches page.</td></tr>';
     } else {
       bsEl.innerHTML = batches.map(b => {
         const statusClass = b.status === 'active' ? 'badge-green' : 'badge-orange';
         return `<tr>
-            <td><strong>${b.name}</strong></td>
-            <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${b.entryTest}</span></td>
+            <td><strong>${esc(b.name)}</strong></td>
+            <td><span class="badge badge-blue" style="font-family:var(--font-mono)">${esc(b.entryTest)}</span></td>
             <td style="font-family:var(--font-mono)">${(b.studentIds || []).length}</td>
             <td><span class="badge ${statusClass}">${b.status}</span></td>
           </tr>`;
@@ -4763,7 +5061,7 @@ const COURSE_COLOR_TINTS = {
   '#C0392B': '#FBEDEB',
 };
 
-/** True if any entry test requires this subject — i.e. auto-enrollment can reach it. */
+/** True if any entry test requires this subject - i.e. auto-enrollment can reach it. */
 function subjectIsRequiredByAnyTest(subject) {
   return ENTRY_TESTS.some(t => (t.subjects || []).includes(subject));
 }
@@ -4782,26 +5080,22 @@ function renderAdminCourses() {
   if (statsEl) {
     const topics    = courses.reduce((n, c) => n + countCourseTopics(c), 0);
     const noContent = courses.filter(c => countCourseTopics(c) === 0).length;
-    const orphaned  = courses.filter(c => !subjectIsRequiredByAnyTest(c.subject)).length;
+    const noTeacher = courses.filter(c => !c.teacher).length;
     statsEl.innerHTML = `
       <div class="stat-card"><div class="stat-icon si-blue" style="font-family:var(--font-mono);font-weight:700">C</div><div class="stat-info"><div class="sv">${courses.length}</div><div class="sl">Total Courses</div></div></div>
       <div class="stat-card"><div class="stat-icon si-green" style="font-family:var(--font-mono);font-weight:700">T</div><div class="stat-info"><div class="sv">${topics}</div><div class="sl">Topics Published</div></div></div>
       <div class="stat-card"><div class="stat-icon si-orange" style="font-family:var(--font-mono);font-weight:700">E</div><div class="stat-info"><div class="sv">${noContent}</div><div class="sl">Awaiting Curriculum</div></div></div>
-      <div class="stat-card"><div class="stat-icon si-red" style="font-family:var(--font-mono);font-weight:700">!</div><div class="stat-info"><div class="sv">${orphaned}</div><div class="sl">Unreachable Subject</div></div></div>`;
+      <div class="stat-card"><div class="stat-icon si-red" style="font-family:var(--font-mono);font-weight:700">!</div><div class="stat-info"><div class="sv">${noTeacher}</div><div class="sl">No Teacher</div></div></div>`;
   }
 
   if (!courses.length) {
     grid.innerHTML = `
       <div style="grid-column:1/-1;text-align:center;padding:2.5rem 1.5rem;background:var(--white);
                   border:1px dashed var(--border);border-radius:var(--radius-xl)">
-        <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:0.5rem">
-          No courses yet
-        </div>
+        <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark);margin-bottom:0.5rem">No courses yet</div>
         <p style="font-size:0.82rem;color:var(--text-mid);max-width:460px;margin:0 auto 1rem;line-height:1.6">
-          Click <strong>Add Course</strong> above to create one. Pick a subject that one of your
-          entry tests already requires — that's what lets students in a matching batch
-          enroll automatically. Once the course exists, its assigned teacher builds the
-          weeks and topics from their own Courses page.
+          Click <strong>Add Course</strong>, pick a batch, then one of its subjects. The teacher is
+          assigned automatically from the batch, and the batch's students are enrolled straight away.
         </p>
         <button class="btn btn-primary btn-sm" onclick="openAdminCourseModal(null)">Add Course</button>
       </div>`;
@@ -4812,10 +5106,7 @@ function renderAdminCourses() {
     const topics   = countCourseTopics(c);
     const weeks    = (c.weeks || []).length;
     const enrolled = (STUDENTS_DB || []).filter(s => (s.enrolledCourseIds || []).includes(c.id)).length;
-    const reachable = subjectIsRequiredByAnyTest(c.subject);
-    // Course.teacher holds an ID now, so printing it raw showed admins 'T001'
-    // where they expected a name. teacherLabel() also handles the deleted-teacher
-    // case, which used to render as a bare id with no hint that it was dangling.
+    const batch    = BATCHES.find(b => b.id === c.batchId);
     const teacherName = c.teacher ? esc(teacherLabel(c.teacher)) : '<em>no teacher assigned</em>';
 
     return `
@@ -4827,10 +5118,10 @@ function renderAdminCourses() {
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;color:var(--text-dark)">${esc(c.title)}</div>
             <div style="font-size:0.72rem;color:var(--text-light)">
-              ${esc(c.subject)} &middot; ${teacherName}
+              ${esc(batch ? batch.name : 'Unknown batch')} &middot; ${esc(c.subject)} &middot; ${teacherName}
             </div>
           </div>
-          <span class="badge badge-blue">${enrolled} students</span>
+          <span class="badge badge-blue">${enrolled} student${enrolled === 1 ? '' : 's'}</span>
         </div>
 
         <p style="font-size:0.8rem;color:var(--text-mid);margin-bottom:0.75rem">
@@ -4848,17 +5139,16 @@ function renderAdminCourses() {
           </div>
         </div>
 
-        ${reachable ? '' : `
+        ${c.teacher ? '' : `
           <div style="font-size:0.72rem;color:#C0392B;background:#FBEDEB;border-radius:var(--radius);
                       padding:0.45rem 0.6rem;margin-bottom:0.75rem;line-height:1.5">
-            No entry test requires <strong>${esc(c.subject)}</strong>, so no batch will auto-enroll
-            students here. Add the subject to an entry test, or change this course's subject.
+            No teacher is assigned to <strong>${esc(c.subject)}</strong> in this batch. Assign one on the Batches page.
           </div>`}
 
         ${topics ? '' : `
           <div style="font-size:0.72rem;color:var(--text-mid);background:var(--bg);border-radius:var(--radius);
                       padding:0.45rem 0.6rem;margin-bottom:0.75rem;line-height:1.5">
-            Curriculum is empty — ${c.teacher ? esc(teacherLabel(c.teacher)) : 'the assigned teacher'} needs to add weeks and topics.
+            Curriculum is empty. ${c.teacher ? esc(teacherLabel(c.teacher)) : 'The assigned teacher'} needs to add weeks and topics.
           </div>`}
 
         <div style="display:flex;gap:6px">
@@ -4869,80 +5159,97 @@ function renderAdminCourses() {
   }).join('');
 }
 
+/** Subjects of a batch's entry test, flagged by whether they can take a new course. */
+function courseSubjectChoices(batchId) {
+  const batch = BATCHES.find(b => b.id === batchId);
+  if (!batch) return [];
+  const test = ENTRY_TESTS.find(t => t.id === batch.entryTestId);
+  const taken = new Set(Object.values(COURSES).filter(c => c.batchId === batchId).map(c => c.subject));
+  const staff = batch.subjectTeachers || {};
+  return ((test && test.subjects) || []).map(name => ({
+    name, teacherId: staff[name] || '', hasCourse: taken.has(name),
+  }));
+}
+
+function refreshCourseTeacherDisplay() {
+  const out = document.getElementById('acm2-teacher-display');
+  if (!out) return;
+  const batch = BATCHES.find(b => b.id === fv('acm2-batch'));
+  const subject = fv('acm2-subject');
+  if (!batch || !subject) { out.value = ''; return; }
+  const tid = (batch.subjectTeachers || {})[subject];
+  const t = tid ? teacherFromRef(tid) : null;
+  out.value = t ? t.name : 'No teacher assigned in this batch';
+}
+
+function onCourseBatchChange() {
+  const batchId = fv('acm2-batch');
+  const sel  = document.getElementById('acm2-subject');
+  const hint = document.getElementById('acm2-subject-hint');
+  if (!batchId) {
+    sel.innerHTML = '<option value="">- Pick a batch first -</option>';
+    sel.disabled = true; hint.textContent = '';
+    refreshCourseTeacherDisplay();
+    return;
+  }
+  const choices = courseSubjectChoices(batchId);
+  sel.disabled = false;
+  sel.innerHTML = '<option value="">- Select subject -</option>' + choices.map(c => {
+    const note = c.hasCourse ? ' - course already exists' : (!c.teacherId ? ' - no teacher assigned in this batch' : '');
+    return `<option value="${escAttr(c.name)}" ${c.hasCourse || !c.teacherId ? 'disabled' : ''}>${esc(c.name + note)}</option>`;
+  }).join('');
+  const usable = choices.filter(c => !c.hasCourse && c.teacherId);
+  hint.textContent = usable.length ? ''
+    : choices.length ? 'Nothing left to create: every subject here already has a course or has no teacher yet (assign teachers on the Batches page).'
+    : "This batch's entry test has no subjects.";
+  if (usable.length === 1) sel.value = usable[0].name;
+  refreshCourseTeacherDisplay();
+}
+
+
+
 /**
  * Opens the course modal. Pass a course id to edit, or null/undefined to create.
  * Populates the subject + teacher dropdowns here rather than in the HTML, because
- * this is a static page — SUBJECTS_DB/TEACHERS_DB aren't loaded until
+ * this is a static page - SUBJECTS_DB/TEACHERS_DB aren't loaded until
  * loadAppData() has run, long after the markup was parsed.
  */
 function openAdminCourseModal(id = null) {
   const modal = document.getElementById('admin-course-modal');
   if (!modal) return;
+  clearFieldErrors('admin-course-modal');
 
   const course = id != null ? COURSES[id] : null;
+  const batchSel = document.getElementById('acm2-batch');
+  const subjSel  = document.getElementById('acm2-subject');
+  const hint     = document.getElementById('acm2-subject-hint');
 
-  const subjSel = document.getElementById('acm2-subject');
-  if (subjSel) {
-    const names = subjectNames();
-    if (!names.length) {
-      subjSel.innerHTML = '<option value="">— no subjects defined —</option>';
-    } else {
-      subjSel.innerHTML = names
-        .map(n => `<option value="${escAttr(n)}">${esc(n)}${subjectIsRequiredByAnyTest(n) ? '' : ' (not in any entry test)'}</option>`)
-        .join('');
-    }
-  }
-
-  // All teachers are listed, annotated with what they teach, so the admin can
-  // pick sensibly. Filtering the list down to matching teachers would risk an
-  // empty dropdown and no way to assign anyone at all.
-  //
-  // Option VALUES are teacher IDS, not names. They used to be names, which meant
-  // Course.teacher held a display string: renaming a teacher orphaned every
-  // course they taught, and two teachers with the same name were indistinguishable.
-  // teacherLabel() turns the stored id back into a name for display.
-  const teachSel = document.getElementById('acm2-teacher');
-  if (teachSel) {
-    if (!TEACHERS_DB.length) {
-      teachSel.innerHTML = '<option value="">— no teachers yet —</option>';
-    } else {
-      teachSel.innerHTML = '<option value="">— unassigned —</option>' + TEACHERS_DB
-        .map(t => {
-          const subs = (t.subjects || []).join(', ') || 'no subjects set';
-          return `<option value="${escAttr(t.id)}">${esc(t.name)} (${esc(subs)})</option>`;
-        })
-        .join('');
-    }
-  }
+  batchSel.innerHTML = BATCHES.length
+    ? '<option value="">- Select batch -</option>' +
+      BATCHES.map(b => `<option value="${escAttr(b.id)}">${esc(b.name)} (${esc(b.entryTest)})</option>`).join('')
+    : '<option value="">- no batches yet: create one first -</option>';
 
   document.getElementById('acm2-modal-title').textContent = course ? 'Edit Course' : 'Add Course';
   document.getElementById('acm2-id').value    = course ? course.id : '';
   document.getElementById('acm2-title').value = course ? (course.title || '') : '';
   document.getElementById('acm2-icon').value  = course ? (course.icon || '') : '';
   document.getElementById('acm2-desc').value  = course ? (course.description || '') : '';
-  if (subjSel  && course) subjSel.value  = course.subject || '';
-  // Legacy rows may still store a name here rather than an id, so resolve it
-  // through teacherFromRef() instead of assigning course.teacher raw — a name
-  // would match no <option> now and silently reset the field to "unassigned".
-  if (teachSel && course) {
-    const t = teacherFromRef(course.teacher);
-    teachSel.value = t ? t.id : '';
+  document.getElementById('acm2-color').value = course ? (course.color || '#1B5FAD') : '#1B5FAD';
+
+  if (course) {
+    batchSel.value = course.batchId; batchSel.disabled = true;
+    subjSel.innerHTML = `<option value="${escAttr(course.subject)}">${esc(course.subject)}</option>`;
+    subjSel.value = course.subject; subjSel.disabled = true;
+    hint.textContent = 'Batch and subject cannot be changed after creation.';
+    refreshCourseTeacherDisplay();
+  } else {
+    batchSel.disabled = false; batchSel.value = '';
+    hint.textContent = '';
+    onCourseBatchChange();
   }
-  const colorSel = document.getElementById('acm2-color');
-  if (colorSel) colorSel.value = course ? (course.color || '#1B5FAD') : '#1B5FAD';
 
   const delBtn = document.getElementById('acm2-delete-btn');
   if (delBtn) delBtn.style.display = course ? 'inline-flex' : 'none';
-
-  const batchSel = document.getElementById('acm2-batch');
-  if (batchSel) {
-    batchSel.innerHTML = BATCHES.length
-      ? BATCHES.map(b => `<option value="${escAttr(b.id)}">${esc(b.name)}</option>`).join('')
-      : '<option value="">— no batches yet —</option>';
-    batchSel.disabled = !!course;   // locked once created
-    if (course) batchSel.value = course.batchId;
-  }
-
   modal.style.display = 'flex';
 }
 
@@ -4953,58 +5260,37 @@ function closeAdminCourseModal() {
 
 /** Creates (POST) or updates (PUT) a course depending on whether acm2-id is set. */
 async function saveAdminCourse() {
-  const editingId   = document.getElementById('acm2-id').value;
-  const title       = document.getElementById('acm2-title').value.trim();
-  const subject     = document.getElementById('acm2-subject').value;
-  const teacher     = document.getElementById('acm2-teacher').value;   // a teacher id
-  const description = document.getElementById('acm2-desc').value.trim();
-  const color       = document.getElementById('acm2-color').value || '#1B5FAD';
-  const icon        = (document.getElementById('acm2-icon').value.trim() || subject.charAt(0)).toUpperCase();
+  const editingId   = fv('acm2-id');
+  const title       = fv('acm2-title').trim();
+  const batchId     = fv('acm2-batch');
+  const subject     = editingId ? ((COURSES[editingId] || {}).subject || '') : fv('acm2-subject');
+  const description = fv('acm2-desc').trim();
+  const color       = fv('acm2-color') || '#1B5FAD';
+  const icon        = (fv('acm2-icon').trim() || subject.charAt(0)).toUpperCase();
 
   clearFieldErrors('admin-course-modal');
-  if (!title)   { setFieldError('acm2-title', 'Course title is required.'); return; }
-  if (!subject) { setFieldError('acm2-subject', 'Pick a subject — add one on the Entry Tests page if this list is empty.'); return; }
+  if (!title) { setFieldError('acm2-title', 'Course title is required.'); return; }
+  if (!editingId && !batchId) { setFieldError('acm2-batch', 'Pick a batch first.'); return; }
+  if (!editingId && !subject) { setFieldError('acm2-subject', 'Pick a subject.'); return; }
 
-  const payload = {
-    title, subject, icon, color,
-    colorLight: COURSE_COLOR_TINTS[color] || '#EBF2FB',
-    teacher, description,
-    ...(editingId ? {} : { batchId: document.getElementById('acm2-batch').value }),
-  };
-  if (!editingId && !payload.batchId) { setFieldError('acm2-batch', 'Pick a batch.'); return; }
+  const payload = { title, icon, color, colorLight: COURSE_COLOR_TINTS[color] || '#EBF2FB', description };
+  if (!editingId) { payload.batchId = batchId; payload.subject = subject; }
 
   const btn = document.getElementById('acm2-save-btn');
   if (btn) btn.disabled = true;
   try {
-    if (editingId) {
-      // Note: no `weeks` key in the payload, so the teacher's existing
-      // curriculum is left untouched by an admin edit.
-      const updated = await apiFetchDetailed(`/courses/${editingId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      COURSES[updated.id] = updated;
-      showToast('Course updated.');
-    } else {
-      // No `id` and no `weeks` here on purpose. The client used to compute
-      // `Math.max(...Object.keys(COURSES)) + 1` from its own cached copy, which
-      // collides whenever two tabs create a course or the page has been open
-      // since before someone else added one — and the server ignored it anyway
-      // (COURSE_META_WRITABLE has no `id`), so the collision showed up as an
-      // unexplained failure. The server assigns the id, with a retry loop.
-      const created = await apiFetchDetailed('/courses', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      COURSES[created.id] = created;
-      showToast('Course created.');
-    }
+    const saved = editingId
+      ? await apiFetchDetailed(`/courses/${editingId}`, { method: 'PUT',  body: JSON.stringify(payload) })
+      : await apiFetchDetailed('/courses',              { method: 'POST', body: JSON.stringify(payload) });
+
+    COURSES[saved.id] = saved;
     closeAdminCourseModal();
+    renderAdminCourses();                       // appears immediately
+    showToast(editingId ? 'Course updated.' : 'Course created.');
+
+    await refreshCourseRelatedData();           // enrolment counts, teacher links
     renderAdminCourses();
   } catch (err) {
-    // The server names the offending field (title / subject / teacher), and the
-    // teacher-subject mismatch message in particular explains exactly what to
-    // fix, so it must not be flattened into a generic toast.
     const orphans = applyFieldErrors(err.fieldErrors, 'acm2', 'admin-course-modal');
     if (!err.fieldErrors || orphans.length) showToast(err.message);
   } finally {
@@ -5027,7 +5313,7 @@ async function deleteAdminCourse(id) {
   if (!confirm(`Delete "${course ? course.title : 'this course'}"?${warning}`)) return;
 
   try {
-    await apiFetch(`/courses/${id}`, { method: 'DELETE' });
+    await apiFetch(`/courses/${id}?force=true`, { method: 'DELETE' });
     delete COURSES[id];
     closeAdminCourseModal();
     renderAdminCourses();
@@ -5048,6 +5334,7 @@ async function saveAdminBatch() {
   const studentIds   = [...document.querySelectorAll('#abm-student-list input[type=checkbox]:checked')].map(cb => cb.value);
 
   if (!name) { showToast('Batch name is required.'); return; }
+  if (!startDate) { showToast('Pick the batch start date.'); return; }
 
   const test = ENTRY_TESTS.find(t => t.id === entryTestId);
   const subjects = test?.subjects || [];
@@ -5072,11 +5359,14 @@ async function saveAdminBatch() {
     }
 
     // Reflect the batch assignment locally (server already persisted this
-    // on each student's record — this just keeps STUDENTS_DB in sync so
+    // on each student's record - this just keeps STUDENTS_DB in sync so
     // the students table doesn't need a full re-fetch).
-    STUDENTS_DB.forEach(s => { if (studentIds.includes(s.id)) s.batch = name; });
+
 
     closeAdminBatchModal();
+
+    await refreshCourseRelatedData();
+
     renderAdminBatches();
     showToast(id ? 'Batch updated.' : 'Batch created.');
   } catch (err) {
@@ -5090,10 +5380,15 @@ async function deleteCurrentBatch() {
   const id = document.getElementById('abm-id').value;
   if (!id || !confirm('Delete this batch?')) return;
   try {
-    await apiFetch(`/batches/${id}`, { method: 'DELETE' });
-    const idx = BATCHES.findIndex(b => b.id === id);
-    if (idx !== -1) BATCHES.splice(idx, 1);
+    try {
+      await apiFetchDetailed(`/batches/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      if (err.status !== 409) throw err;
+      if (!confirm(`${err.message}\n\nDelete the batch and those courses anyway?`)) return;
+      await apiFetchDetailed(`/batches/${id}?force=true`, { method: 'DELETE' });
+    }
     closeAdminBatchModal();
+    await refreshCourseRelatedData();
     renderAdminBatches();
     showToast('Batch deleted.');
   } catch (err) {
@@ -5103,7 +5398,7 @@ async function deleteCurrentBatch() {
 
 
 // navigateTo() and initAdminSPA() used to live here. Both were part of the
-// retired hash-routing Admin shell — see the "RETIRED: ADMIN SPA ROUTER" note
+// retired hash-routing Admin shell - see the "RETIRED: ADMIN SPA ROUTER" note
 // where ADMIN_ROUTES used to be defined. Nothing calls them any more; the
 // router in §16 no longer has an `if (document.getElementById('page-content'))`
 // branch.
@@ -5111,7 +5406,7 @@ async function deleteCurrentBatch() {
 // Temp working list while building a new entry test in the "Add Entry Test" form.
 window._newTestSubjects = [];
 // Working copies for the edit-subjects modal. Declared here so they exist before
-// any handler can read them — tests.html used to declare them in an inline
+// any handler can read them - tests.html used to declare them in an inline
 // <script>, which meant a second set of the same globals shadowing these.
 window._editTestSubjects = [];
 window._editingTestId    = null;
@@ -5166,7 +5461,8 @@ const MAX_ATTEMPTS = 3;
 
 // ── Attempt tracking (per student, per course) ──────────────────────────────
 function getAttempts(studentId, courseId) {
-  return parseInt(localStorage.getItem(`attempts_${studentId}_${courseId}`) || '0');
+  const s = getActiveStudent();
+  return s ? (s.quizScores || []).filter(q => q.isAIRetry && q.courseId === courseId).length : 0;
 }
 function incrementAttempt(studentId, courseId) {
   const n = getAttempts(studentId, courseId) + 1;
@@ -5220,18 +5516,19 @@ function getAttemptedTopics(student, courseId) {
 // }
 
 /** Asks Claude for short bullet-point revision notes covering the student's weak topics. */
-async function generateStudyNotes(course, weakTopics) {
+async function generateStudyNotes(course, topics) {
   const data = await apiFetch('/ai/study-notes', {
     method: 'POST',
-    body: JSON.stringify({ course: { subject: course.subject, title: course.title }, weakTopics }),
+    body: JSON.stringify({ courseId: course.id, topicIds: topics.map(t => t.topicId) }),
   });
   return data.notes;
 }
 
-async function generateQuizQuestions(course, weakTopics, numQuestions = 5) {
+
+async function generateQuizQuestions(course, topics) {
   const data = await apiFetch('/ai/generate-quiz', {
     method: 'POST',
-    body: JSON.stringify({ course: { subject: course.subject, title: course.title }, weakTopics, numQuestions }),
+    body: JSON.stringify({ courseId: course.id, topicIds: topics.map(t => t.topicId) }),
   });
   return data.questions;
 }
@@ -5239,7 +5536,7 @@ async function generateQuizQuestions(course, weakTopics, numQuestions = 5) {
 // /** Asks Claude for a fresh set of MCQ questions targeting the student's weak topics. Returns a parsed array of { q, options, ans, topicTitle }. */
 // async function generateQuizQuestions(course, weakTopics, numQuestions = 5) {
 //   const topicList = weakTopics.map(t => t.title).join(', ');
-//   const systemPrompt = `You are a quiz generator for ${course.subject} (${course.title}).
+//   const systemPrompt = `You are a quiz generator for ${esc(course.subject)} (${esc(course.title)}).
 // Generate exactly ${numQuestions} multiple-choice questions targeting these weak topics: ${topicList}.
 // CRITICAL: Respond with ONLY a valid JSON array. No preamble, no markdown, no explanation. Just the raw JSON array.
 // Format:
@@ -5292,13 +5589,13 @@ function openAIStudyPanel(courseId) {
     const attempted = attemptedTopics.find(a => a.topicId === t.id);
     if (!attempted) {
       return `<span style="font-size:0.72rem;padding:3px 9px;border-radius:20px;
-        background:var(--border);color:var(--text-light)">${t.title}</span>`;
+        background:var(--border);color:var(--text-light)">${esc(t.title)}</span>`;
     }
     const isWeak = attempted.pct < 70;
     return `<span style="font-size:0.72rem;padding:3px 9px;border-radius:20px;
       background:${isWeak ? '#fecaca' : '#bbf7d0'};
       color:${isWeak ? '#991b1b' : '#166534'}">
-      ${t.title} · ${attempted.pct}%
+      ${esc(t.title)} · ${attempted.pct}%
     </span>`;
   }).join('');
 
@@ -5317,7 +5614,7 @@ function openAIStudyPanel(courseId) {
                       color:var(--text-light);font-family:var(--font-mono);margin-bottom:2px">
             AI Study Assistant
           </div>
-          <div style="font-size:1rem;font-weight:600;color:var(--text-dark)">${course.title}</div>
+          <div style="font-size:1rem;font-weight:600;color:var(--text-dark)">${esc(course.title)}</div>
           <div style="font-size:0.75rem;color:var(--text-light);margin-top:2px">
             ${remaining > 0
               ? `${remaining} re-attempt${remaining !== 1 ? 's' : ''} remaining`
@@ -5349,7 +5646,7 @@ function openAIStudyPanel(courseId) {
             ${weakTopics.length} topic${weakTopics.length !== 1 ? 's' : ''} need${weakTopics.length === 1 ? 's' : ''} review
           </div>
           <div style="font-size:0.75rem;color:#78350F;line-height:1.5">
-            ${weakTopics.map(t => `${t.title} (${t.pct}%)`).join(' · ')}
+            ${weakTopics.map(t => `${esc(t.title)} (${t.pct}%)`).join(' · ')}
           </div>
         </div>
 
@@ -5445,22 +5742,22 @@ async function loadStudyNotes(courseId) {
       .map(line => {
         if (line.startsWith('## ')) {
           return `<div style="font-weight:600;color:var(--text-dark);margin-top:0.85rem;
-                              margin-bottom:0.3rem;font-size:0.85rem">${line.slice(3)}</div>`;
+                              margin-bottom:0.3rem;font-size:0.85rem">${esc(line.slice(3))}</div>`;
         }
         if (line.startsWith('• ') || line.startsWith('- ')) {
           return `<div style="display:flex;gap:7px;margin-bottom:4px">
                     <span style="color:var(--blue);flex-shrink:0;margin-top:1px">•</span>
-                    <span style="font-size:0.8rem;line-height:1.55">${line.slice(2)}</span>
+                    <span style="font-size:0.8rem;line-height:1.55">${esc(line.slice(2))}</span>
                   </div>`;
         }
         if (line.trim()) {
-          return `<div style="font-size:0.8rem;line-height:1.55;margin-bottom:3px">${line}</div>`;
+          return `<div style="font-size:0.8rem;line-height:1.55;margin-bottom:3px">${esc(line)}</div>`;
         }
         return '';
       })
       .join('');
 
-    body.innerHTML = html || '<span style="color:var(--text-light)">Notes generated — no content returned.</span>';
+    body.innerHTML = html || '<span style="color:var(--text-light)">Notes generated - no content returned.</span>';
     btn.textContent = 'Regenerate';
     btn.disabled = false;
   } catch (err) {
@@ -5508,8 +5805,8 @@ async function startRetryQuiz(courseId) {
       return;
     }
 
-    const questions = await generateQuizQuestions(course, topicsForQuiz, 5);
-    const attemptNum = incrementAttempt(student.id, courseId);
+    const questions = await generateQuizQuestions(course, topicsForQuiz);
+    const attemptNum = attempts + 1;
 
     if (modal) modal.style.display = 'none';
     openRetryQuizModal(courseId, attemptNum, questions);
@@ -5549,13 +5846,13 @@ function openRetryQuizModal(courseId, attemptNum, questions) {
     <div class="quiz-q" style="margin-bottom:1.2rem" id="rq-${qi}">
       <p style="font-size:0.85rem;font-weight:500;margin-bottom:0.5rem;
                 color:var(--text-dark);line-height:1.5">
-        ${qi + 1}. ${q.q}
+        ${qi + 1}. ${esc(q.q)}
         ${q.topicTitle ? `<span style="display:block;font-size:0.68rem;color:var(--text-light);
-          font-weight:400;margin-top:2px">${q.topicTitle}</span>` : ''}
+          font-weight:400;margin-top:2px">${esc(q.topicTitle)}</span>` : ''}
       </p>
       ${q.options.map((opt, oi) => `
         <div class="quiz-opt"
-          data-qi="${qi}" data-oi="${oi}" data-ans="${q.ans}"
+          data-qi="${qi}" data-oi="${oi}" data-ans="${Number(q.ans)}"
           onclick="pickOpt(this)"
           style="font-size:0.82rem;padding:0.5rem 0.75rem;margin-bottom:5px;
                  border-radius:var(--radius);border:1px solid var(--border);
@@ -5566,7 +5863,7 @@ function openRetryQuizModal(courseId, attemptNum, questions) {
                        min-width:14px">
             ${String.fromCharCode(65 + oi)}
           </span>
-          <span>${opt}</span>
+          <span>${esc(opt)}</span>
         </div>`).join('')}
     </div>`).join('');
 
@@ -5584,7 +5881,7 @@ function openRetryQuizModal(courseId, attemptNum, questions) {
             AI Quiz · Attempt ${attemptNum} of ${MAX_ATTEMPTS}
           </div>
           <div style="font-size:0.95rem;font-weight:600;color:var(--text-dark)">
-            ${course.subject} — Personalized Questions
+            ${esc(course.subject)} - Personalized Questions
           </div>
         </div>
         <div style="font-size:0.75rem;color:var(--text-light);font-family:var(--font-mono)">
@@ -5651,11 +5948,16 @@ async function submitRetryQuiz(courseId, attemptNum, total) {
   if (submitBtn) submitBtn.style.display = 'none';
 
   // Record this as a distinct AI-retry quiz entry (not tied to a specific topicId).
-  const entry = await apiFetch(`/students/${student.id}/quiz-scores/ai-retry`, {
-    method: 'POST',
-    body: JSON.stringify({ subject: COURSES[courseId].subject, courseId, score: correct, total, attemptNum }),
-  });
-  student.quizScores.push(entry);
+    try {
+      const entry = await apiFetch(`/students/${student.id}/quiz-scores/ai-retry`, {
+        method: 'POST',
+        body: JSON.stringify({ courseId, score: correct, total }),
+      });
+      student.quizScores.push(entry);
+    } catch (err) {
+      showToast('Result shown but not saved: ' + err.message);
+    }
+  
 
   const resultEl = document.getElementById('retry-quiz-result');
   if (resultEl) {
@@ -5703,7 +6005,7 @@ async function submitRetryQuiz(courseId, attemptNum, total) {
   }
 }
 
-/** Legacy entry point (still referenced by some "Re-attempt Quizzes" buttons) — just opens the main study panel. */
+/** Legacy entry point (still referenced by some "Re-attempt Quizzes" buttons) - just opens the main study panel. */
 function openRetryQuiz(courseId) {
   const student  = getActiveStudent();
   const attempts = getAttempts(student.id, courseId);
@@ -5740,7 +6042,7 @@ function handleFileDrop(event, topicSafe) {
 
 /**
  * Submits a student's assignment (text answer and/or file). This is a mock
- * submission — there's no real backend/file storage — it just updates the
+ * submission - there's no real backend/file storage - it just updates the
  * student's assignment record, fires a notification, and re-renders the
  * topic's content panel to show the "submitted" state.
  */
@@ -5760,18 +6062,19 @@ async function submitAssignment(topicId, topicSafe) {
 
   const student = getActiveStudent();
   const assign = student.assignments.find(a => a.topicId === topicId);
-  if (!assign) { showToast('Assignment record not found.'); return; }
+  const assignId = assign ? assign.id : 'a_' + topicId;
+
 
   const formData = new FormData();
   if (hasText) formData.append('text', textEl.value.trim());
   if (hasFile) formData.append('file', fileInp.files[0]);
 
   try {
-    const updated = await apiFetch(`/students/${student.id}/assignments/${assign.id}/submit`, {
+    const updated = await apiFetch(`/students/${encodeURIComponent(student.id)}/assignments/${encodeURIComponent(assignId)}/submit`, {
       method: 'PATCH',
       body: formData,
     });
-    Object.assign(assign, updated); // update the cached CURRENT_STUDENT in place
+    if (assign) Object.assign(assign, updated); else student.assignments.push(updated);
 
     const topicEl = document.querySelector(`.topic-item[data-id="${topicId}"]`);
     if (topicEl) topicEl.click(); // re-render the panel into its "submitted" state

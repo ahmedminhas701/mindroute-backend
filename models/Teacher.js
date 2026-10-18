@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const V = require('../utils/validate');
 
 // See models/Student.js for why these schema-level validators exist alongside
-// the rule engine in public/js/validation.js — short version: the rule engine
+// the rule engine in public/js/validation.js - short version: the rule engine
 // gives good error messages, the schema guarantees nothing bad gets stored even
 // through a route or script that forgets to call it.
 
@@ -39,7 +39,7 @@ const teacherSchema = new mongoose.Schema({
   // subject in the same batch.
   //
   // ★ Every entry MUST match a Subject document's name exactly, including case.
-  //   All subject matching in this codebase is exact string comparison — see
+  //   All subject matching in this codebase is exact string comparison - see
   //   enrollStudentsInBatchCourses(). "biology" and "Biology" are two different
   //   subjects as far as the code is concerned, and a mismatch makes a course
   //   silently vanish from the student's and teacher's course list with no
@@ -57,7 +57,7 @@ const teacherSchema = new mongoose.Schema({
 
   // ── Fields added 2026-08-30 ───────────────────────────────────────────────
   // A teacher record with only name/email/phone/subjects isn't enough to staff
-  // a batch — there was no record of what anyone was qualified to teach.
+  // a batch - there was no record of what anyone was qualified to teach.
   qualification: {
     type: String,
     enum: { values: V.QUALIFICATIONS, message: 'Qualification must be one of: ' + V.QUALIFICATIONS.join(', ') + '.' },

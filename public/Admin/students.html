@@ -4,7 +4,7 @@
   <style>html,body{background:#f7f8fa!important}</style>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Students — Mind Route Admin</title>
+  <title>Students - Mind Route Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
@@ -84,7 +84,7 @@
         <button class="btn btn-primary btn-sm" onclick="openAdminStudentModal(null)">Add Student</button>
         <div class="notif-bell-wrap" id="notif-bell-wrap">
           <div class="notif-bell" id="notif-bell">
-            <span style="font-size:0.85rem">&#x1F514;</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <div class="notif-count" id="notif-count" style="display:none">0</div>
           </div>
           <div class="notif-dropdown" id="notif-dropdown">
@@ -194,7 +194,7 @@
       <div class="form-group">
         <label class="req">Phone</label>
         <input type="tel" class="form-control" id="asm-phone" placeholder="0300-1234567" inputmode="tel">
-        <span class="field-hint">Pakistani mobile — 03XX-XXXXXXX or +923XXXXXXXXX.</span>
+        <span class="field-hint">Pakistani mobile - 03XX-XXXXXXX or +923XXXXXXXXX.</span>
       </div>
       <div class="form-group">
         <label class="req">Gender</label>
@@ -269,11 +269,11 @@
         <input type="number" class="form-control" id="asm-paidAmount" placeholder="0" min="0" max="10000000" step="1">
         <span class="field-hint">Cannot exceed the total fee.</span>
       </div>
-      <div class="form-group">
+      <!-- <div class="form-group">
         <label>Attendance %</label>
         <input type="number" class="form-control" id="asm-attendance" placeholder="0" min="0" max="100" step="1">
-        <span class="field-hint">Leave at 0 for a new student — it is recalculated from attendance records.</span>
-      </div>
+        <span class="field-hint">Leave at 0 for a new student - it is recalculated from attendance records.</span>
+      </div> -->
     </div>
 
     <!-- Add-only, for the same reason as the teacher form: the API never returns
@@ -289,7 +289,9 @@
 
     <div style="display:flex;gap:0.65rem;justify-content:flex-end;margin-top:1rem">
       <button class="btn btn-ghost btn-sm" onclick="closeAdminStudentModal()">Cancel</button>
+      <button class="btn btn-outline btn-sm" id="atm-reset-btn" onclick="resetCurrentTeacherPassword()" style="display:none">Reset Password</button>
       <button class="btn btn-danger btn-sm" id="asm-delete-btn" onclick="deleteCurrentStudent()" style="display:none">Delete Student</button>
+      <button class="btn btn-outline btn-sm" id="asm-fees-btn" onclick="openFeeInstalments()" style="display:none">Fee Instalments</button>
       <button class="btn btn-primary btn-sm" id="asm-save-btn" onclick="saveAdminStudent()">Save</button>
     </div>
   </div>

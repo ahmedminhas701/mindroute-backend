@@ -18,7 +18,7 @@ const subjectSchema = new mongoose.Schema({
     minlength: 2,
     maxlength: 40,
   },
-  // Core subjects can't be deleted by an admin — they're the ones the seeded
+  // Core subjects can't be deleted by an admin - they're the ones the seeded
   // entry tests and courses are built on.
   isCore: { type: Boolean, default: false },
 }, { timestamps: true });
@@ -30,7 +30,7 @@ const subjectSchema = new mongoose.Schema({
 // single worst thing that can happen to this collection: you end up with two
 // subjects that look identical in the dropdown, with a course filed under one
 // and the teacher qualified in the other, and no join between them ever
-// matching. The failure is completely silent — the course just never appears.
+// matching. The failure is completely silent - the course just never appears.
 //
 // A collation-backed index makes the database itself refuse the second variant,
 // so the guarantee holds even for writes that skip routes/subjects.js (seed

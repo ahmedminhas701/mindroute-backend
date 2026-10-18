@@ -6,7 +6,7 @@
 // module can be swapped out without touching any route file.
 //
 // Fixed-window counter held in process memory. That means:
-//   - it resets when the server restarts (acceptable — a brute-force run that
+//   - it resets when the server restarts (acceptable - a brute-force run that
 //     survives a restart is not the threat model here)
 //   - it does NOT work across multiple server instances. If you ever run more
 //     than one node process behind a load balancer, move this to Redis or the
@@ -84,4 +84,32 @@ function resetRateLimit(pathKey, ...identifiers) {
   identifiers.filter(Boolean).forEach(id => buckets.delete(`${pathKey}|${id}`));
 }
 
-module.exports = { rateLimit, resetRateLimit };
+// ── Failure-only limiter (used by login) ──────────────────────────────────
+function activeBucket(key) {
+  const b = buckets.get(key);
+  if (!b) return null;
+  if (b.resetAt <= Date.now()) { buckets.delete(key); return null; }
+  return b;
+}
+
+/** Seconds to wait if ANY [key, max] pair is at its limit, else 0. */
+function secondsUntilAllowed(checks) {
+  let wait = 0;
+  for (const [key, max] of checks) {
+    const b = activeBucket(key);
+    if (b && b.count >= max) wait = Math.max(wait, Math.ceil((b.resetAt - Date.now()) / 1000));
+  }
+  return wait;
+}
+
+function recordFailure(key, windowMs) {
+  let b = activeBucket(key);
+  if (!b) { b = { count: 0, resetAt: Date.now() + windowMs }; buckets.set(key, b); }
+  b.count += 1;
+}
+
+function clearKey(key) { buckets.delete(key); }
+
+module.exports = { rateLimit, resetRateLimit, secondsUntilAllowed, recordFailure, clearKey };
+
+

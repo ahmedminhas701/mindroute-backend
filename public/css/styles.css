@@ -248,7 +248,7 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   font-weight: 700;
 }
 
-/* Short helper text under an input — used for format hints like the phone
+/* Short helper text under an input - used for format hints like the phone
    pattern, which is the single most common thing people type wrongly. */
 .field-hint {
   color: var(--text-light);

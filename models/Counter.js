@@ -13,7 +13,7 @@ const mongoose = require('mongoose');
 // which is broken in two separate ways:
 //
 //   1. DELETES. With 5 students (S001-S005), delete S003 and the count drops to
-//      4, so the next student is created as S005 — a duplicate. The unique index
+//      4, so the next student is created as S005 - a duplicate. The unique index
 //      rejects it with a raw E11000, and the admin sees "Failed to create
 //      student" with no idea why. It then fails forever, because every retry
 //      computes the same colliding id.

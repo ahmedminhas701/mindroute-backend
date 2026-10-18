@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 // `subject` and `course` are DENORMALISED copies of the parent course's fields,
 // kept because the student dashboard and the teacher timetable both render them
 // directly. They are written only by routes/schedule.js, which reads them off the
-// Course record — never from the request body. Before that, the client sent
+// Course record - never from the request body. Before that, the client sent
 // `subject` itself and fell back to sending the course TITLE when it couldn't
 // resolve the course, so rows existed whose "subject" matched no Subject at all.
 //

@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
     // lowercase + trim at the schema level as well as in the routes. The unique
     // index is case-SENSITIVE, so without this " Ayesha@Mindroute.pk " and
     // "ayesha@mindroute.pk" are two different users that both satisfy the index
-    // — and only one of them can ever log in, because routes/auth.js looks up
+    // - and only one of them can ever log in, because routes/auth.js looks up
     // the lowercased form.
     lowercase: true,
     trim: true,
@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema({
     // .select('+password'). routes/auth.js is the only place that does.
     select: false,
     // NOTE: there is deliberately NO minlength here. This field holds a bcrypt
-    // HASH, which is always 60 characters — a minlength would validate the hash
+    // HASH, which is always 60 characters - a minlength would validate the hash
     // and pass every time, including for the plaintext password "a". The real
     // check has to happen before hashing, and it does: routes/students.js,
     // routes/teachers.js and routes/auth.js all reject a plaintext password

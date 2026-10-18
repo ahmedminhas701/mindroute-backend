@@ -2,23 +2,26 @@ const express = require('express');
 const router = express.Router();
 
 const TeacherSchedule = require('../models/TeacherSchedule');
+const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
 const Course = require('../models/Course');
 const { protect, restrictTo } = require('../middleware/auth');
 const V = require('../utils/validate');
 
+const { notifyCourseStudents } = require('../utils/notify');
+
 router.use(protect);
 
 // ── What was wrong with this file ────────────────────────────────────────────
 //
-// POST was `TeacherSchedule.create(req.body)` — the entire request body, straight
+// POST was `TeacherSchedule.create(req.body)` - the entire request body, straight
 // into the database. Three consequences:
 //
 //   1. No validation at all. A class could be saved with day: 'Funday',
 //      time: 'whenever', duration: -5, and it would persist happily.
 //   2. `subject` was whatever the client sent. The client sent the COURSE TITLE
 //      when it couldn't match the course, so schedule rows ended up with
-//      subject: 'Cell Biology Complete' — a string matching no Subject, which is
+//      subject: 'Cell Biology Complete' - a string matching no Subject, which is
 //      the same silent-mismatch failure the subject dropdowns exist to prevent.
 //   3. `teacherId` came from the client, or was simply absent. Combined with PUT
 //      and DELETE having no ownership check, ANY teacher could rewrite or delete
@@ -39,7 +42,7 @@ async function callerTeacher(req) {
 /**
  * Build a clean, fully-derived schedule row from a request body.
  *
- * `subject` and `course` are read off the Course record, never off the body —
+ * `subject` and `course` are read off the Course record, never off the body -
  * that's what keeps schedule.subject a real subject name instead of whatever
  * text happened to be in the dropdown.
  */
@@ -94,7 +97,7 @@ async function buildRow(req, res, existing) {
       const ownsCourse = course.teacher === me.id || (me.courseIds || []).includes(course.id);
       if (!ownsCourse) {
         res.status(403).json({
-          message: `"${course.title}" isn't one of your courses.`,
+          message: `"${esc(course.title)}" isn't one of your courses.`,
           errors: { courseId: 'You can only schedule your own courses.' },
         });
         return null;
@@ -130,13 +133,24 @@ async function buildRow(req, res, existing) {
   return out;
 }
 
-// GET /api/schedule — everyone reads this (the student "today's classes" widget
-// too), optionally filtered by day or teacher.
+// GET /api/schedule - students see only classes of courses they are enrolled in,
+// teachers only their own, admins everything.
 router.get('/', async (req, res) => {
   try {
     const filter = {};
-    if (req.query.day && DAYS.includes(req.query.day)) filter.day = req.query.day;
-    if (req.query.teacherId) filter.teacherId = String(req.query.teacherId);
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    if (req.query.day && days.includes(req.query.day)) filter.day = req.query.day;
+
+    if (req.user.role === 'student') {
+      const me = await Student.findOne({ email: req.user.email }, { enrolledCourseIds: 1 }).lean();
+      filter.courseId = { $in: (me && me.enrolledCourseIds) || [] };
+    } else if (req.user.role === 'teacher') {
+      const me = await Teacher.findOne({ email: req.user.email }, { id: 1 }).lean();
+      filter.teacherId = me ? me.id : '__none__';
+    } else if (req.query.teacherId) {
+      filter.teacherId = String(req.query.teacherId);
+    }
+
     const rows = await TeacherSchedule.find(filter).sort({ day: 1, time: 1 }).lean();
     res.json(rows);
   } catch (err) {
@@ -162,6 +176,7 @@ router.post('/', restrictTo('admin', 'teacher'), async (req, res) => {
     const clean = await buildRow(req, res, null);
     if (!clean) return;                       // response already sent
     const row = await TeacherSchedule.create(clean);
+    await notifyCourseStudents(row.courseId, { type: 'schedule', title: 'Class scheduled', body: `${row.course}: ${row.day} at ${row.time} (${row.type}, ${row.duration} min).` });
     res.status(201).json(row);
   } catch (err) {
     console.error('POST /schedule failed:', err);
@@ -186,6 +201,8 @@ router.put('/:id', restrictTo('admin', 'teacher'), async (req, res) => {
     if (!clean) return;
     Object.assign(existing, clean);
     await existing.save();
+    await notifyCourseStudents(existing.courseId, { type: 'schedule', title: 'Class updated', body: `${existing.course}: now ${existing.day} at ${existing.time} (${existing.type}, ${existing.duration} min).` });
+    
     res.json(existing);
   } catch (err) {
     console.error('PUT /schedule/:id failed:', err);
@@ -205,6 +222,7 @@ router.delete('/:id', restrictTo('admin', 'teacher'), async (req, res) => {
     }
 
     await row.deleteOne();
+    await notifyCourseStudents(row.courseId, { type: 'schedule', title: 'Class cancelled', body: `${row.course}: the ${row.day} ${row.time} class has been removed.` });
     res.json({ message: 'Class removed.' });
   } catch (err) {
     console.error('DELETE /schedule/:id failed:', err);

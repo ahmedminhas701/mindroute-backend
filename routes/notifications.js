@@ -15,7 +15,7 @@ router.use(protect);
 //
 //        userId: userId || req.user._id
 //
-//    so ANY logged-in user — a student included — could post a notification
+//    so ANY logged-in user - a student included - could post a notification
 //    into any other account's bell by supplying that account's id. Since the
 //    bell renders the title and body, that is a channel for sending arbitrary
 //    messages that appear to come from the academy. Only admins and teachers
@@ -45,7 +45,7 @@ function isObjectId(v) {
   return mongoose.Types.ObjectId.isValid(String(v || '')) && String(v).length === 24;
 }
 
-// GET /api/notifications — only ever the caller's own.
+// GET /api/notifications - only ever the caller's own.
 router.get('/', async (req, res) => {
   try {
     const notifs = await Notification.find({ userId: req.user._id })
@@ -169,7 +169,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/notifications — admin housekeeping: clear the caller's own list.
+// DELETE /api/notifications - admin housekeeping: clear the caller's own list.
 router.delete('/', restrictTo('admin', 'teacher', 'student'), async (req, res) => {
   try {
     const result = await Notification.deleteMany({ userId: req.user._id });

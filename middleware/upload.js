@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // All uploaded assignment files land here, served statically by server.js
 // at /uploads/<filename>. In production, swap this disk storage for S3/
-// Cloudinary/etc — see TECHNICAL_REFERENCE.md §11.6.
+// Cloudinary/etc - see TECHNICAL_REFERENCE.md §11.6.
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -31,5 +31,5 @@ function fileFilter(req, file, cb) {
 module.exports = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB — matches the "max 10MB" hint in app.js
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB - matches the "max 10MB" hint in app.js
 });

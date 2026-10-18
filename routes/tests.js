@@ -27,7 +27,7 @@ function cleanName(raw) {
   return { ok: true, name };
 }
 
-// GET /api/tests — every role reads this (batch creation, dashboards, etc.)
+// GET /api/tests - every role reads this (batch creation, dashboards, etc.)
 router.get('/', async (req, res) => {
   try {
     const tests = await EntryTest.find({}).sort({ name: 1 });
@@ -50,7 +50,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/tests — body: { name, desc, subjects: [] }
+// POST /api/tests - body: { name, desc, subjects: [] }
 router.post('/', restrictTo('admin'), async (req, res) => {
   try {
     const body = V.pick(req.body, TEST_WRITABLE);
@@ -66,13 +66,13 @@ router.post('/', restrictTo('admin'), async (req, res) => {
     }
     // Resolve to canonical spelling. An entry test whose subjects[] doesn't
     // exactly match Course.subject makes every course under it invisible on the
-    // student's Courses page — that's the whole reason this check exists.
+    // student's Courses page - that's the whole reason this check exists.
     const subjects = await resolveSubjectsOr400(res, body.subjects, 'Subject');
     if (!subjects) return;
 
     // Reject a duplicate by NAME, not just by slug. 'MDCAT' and 'mdcat ' both
     // slugify to 'mdcat', and the old code responded by silently creating
-    // 'mdcat_1' — two entry tests with the same displayed name, which is
+    // 'mdcat_1' - two entry tests with the same displayed name, which is
     // indistinguishable to the admin and splits batches across both.
     const dup = await EntryTest.findOne({ name: new RegExp('^' + V.escapeRegex(nameR.name) + '$', 'i') }).lean();
     if (dup) {
@@ -107,7 +107,7 @@ router.post('/', restrictTo('admin'), async (req, res) => {
   }
 });
 
-// PUT /api/tests/:id — general field edit
+// PUT /api/tests/:id - general field edit
 router.put('/:id', restrictTo('admin'), async (req, res) => {
   try {
     const test = await EntryTest.findOne({ id: req.params.id });
@@ -151,7 +151,7 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
   }
 });
 
-// PUT /api/tests/:id/subjects — full replace of the subject list.
+// PUT /api/tests/:id/subjects - full replace of the subject list.
 router.put('/:id/subjects', restrictTo('admin'), async (req, res) => {
   try {
     const test = await EntryTest.findOne({ id: req.params.id });
@@ -173,12 +173,15 @@ router.put('/:id/subjects', restrictTo('admin'), async (req, res) => {
 
     // Warn before removing a subject that courses are currently filed under.
     const removed = (test.subjects || []).filter(s => !subjects.includes(s));
-    if (removed.length && req.query.force !== 'true') {
-      const affected = await Course.find({ subject: { $in: removed } }, { title: 1 }).lean();
+    if (removed.length) {
+      const testBatches = await Batch.find({ entryTestId: test.id }, { id: 1 }).lean();
+      const affected = await Course.find(
+        { batchId: { $in: testBatches.map(b => b.id) }, subject: { $in: removed } },
+        { title: 1 }
+      ).lean();
       if (affected.length) {
         return res.status(409).json({
-          message: `Removing ${removed.join(', ')} would hide ${affected.length} course(s) from students and teachers: ` +
-                   `${affected.map(c => c.title).join(', ')}. Move or delete those courses first, or resend with ?force=true.`,
+          message: `Removing ${removed.join(', ')} would strand ${affected.length} course(s): ${affected.map(c => c.title).join(', ')}. Delete those courses first.`,
           affectedCourses: affected.map(c => c.title),
         });
       }
@@ -199,7 +202,7 @@ router.delete('/:id', restrictTo('admin'), async (req, res) => {
     const inUse = await Batch.find({ entryTestId: req.params.id }, { name: 1 }).lean();
     if (inUse.length) {
       return res.status(409).json({
-        message: `Cannot remove this entry test — ${inUse.length} batch(es) still use it: ` +
+        message: `Cannot remove this entry test - ${inUse.length} batch(es) still use it: ` +
                  `${inUse.map(b => b.name).join(', ')}. Delete or reassign those batches first.`,
       });
     }

@@ -14,7 +14,7 @@ router.use(protect);
 // compared `t.min` values without ever checking they were numbers. Three faults
 // followed from that, and all three are academy-wide, not per-record:
 //
-//   1. A non-numeric min — `{ min: "eighty", grade: "A" }` — became NaN. Every
+//   1. A non-numeric min - `{ min: "eighty", grade: "A" }` - became NaN. Every
 //      comparison against NaN is false, so the order check passed, the sort was
 //      undefined behaviour, and calcGrade()'s `pct >= t.min` was false for every
 //      threshold. Result: the fallback fired and EVERY STUDENT IN THE ACADEMY
@@ -27,7 +27,7 @@ router.use(protect);
 //
 // Also: the recompute divided by `a.totalMarks` with no zero check, so an
 // assignment saved with a total of 0 produced Infinity, and Infinity >= any
-// min is true — that assignment silently became an A+.
+// min is true - that assignment silently became an A+.
 
 // Highest to lowest. This is both the allowed set of letters and the ordering
 // the mins have to respect.
@@ -101,7 +101,7 @@ function cleanThresholds(raw) {
 
   // Without a threshold at or below 0 there is a band at the bottom that no
   // threshold claims. calcGrade() falls back to 'F' there, which is the right
-  // answer — but only by accident, and only if 'F' is what you wanted. Make it
+  // answer - but only by accident, and only if 'F' is what you wanted. Make it
   // explicit instead of relying on the fallback.
   const lowest = cleaned[cleaned.length - 1];
   if (lowest.min > 0) {
@@ -114,7 +114,7 @@ function cleanThresholds(raw) {
   return { ok: true, value: cleaned };
 }
 
-// GET /api/thresholds — open to every logged-in role. Students need this
+// GET /api/thresholds - open to every logged-in role. Students need this
 // too (calcGradeFromThreshold() runs on the student Performance page).
 router.get('/', async (req, res) => {
   try {
@@ -126,9 +126,9 @@ router.get('/', async (req, res) => {
   }
 });
 
-// PUT /api/thresholds — mirrors applyThresholds(), then recomputes every
+// PUT /api/thresholds - mirrors applyThresholds(), then recomputes every
 // student's assignment grades, skipping any assignment with manualGrade: true.
-// Admin AND teacher can call this — the threshold editor lives on the
+// Admin AND teacher can call this - the threshold editor lives on the
 // teacher Grading page in app.js, so teacher-only would 403 every teacher.
 // body: { thresholds: [{ min, grade }, ...] }
 router.put('/', restrictTo('admin', 'teacher'), async (req, res) => {

@@ -1,5 +1,5 @@
 // ╔══════════════════════════════════════════════════════════════════════════╗
-// ║  MIND ROUTE — SHARED VALIDATION                                          ║
+// ║  MIND ROUTE - SHARED VALIDATION                                          ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 //
 // ONE implementation, used by BOTH the browser and the server.
@@ -17,7 +17,7 @@
 // and a paidAmount larger than the totalFee.
 //
 // THE RULE: client-side validation exists to give the user a fast, specific
-// error message. It is NOT a security boundary — anyone can open devtools and
+// error message. It is NOT a security boundary - anyone can open devtools and
 // POST whatever they like. Every rule here is therefore run AGAIN on the
 // server. Never add a check to only one side.
 //
@@ -40,7 +40,7 @@
   'use strict';
 
   // ── Primitive normalisers ───────────────────────────────────────────────
-  // Each returns { ok, value, error }. `value` is the cleaned form to store —
+  // Each returns { ok, value, error }. `value` is the cleaned form to store -
   // always store the normalised value, never the raw input, otherwise
   // "0300 1234567" and "0300-1234567" become two different strings that no
   // lookup will ever match.
@@ -84,7 +84,7 @@
   }
 
   /**
-   * CNIC / B-Form number — 13 digits, canonical form 35202-1234567-1.
+   * CNIC / B-Form number - 13 digits, canonical form 35202-1234567-1.
    * Students under 18 have a B-Form, which uses the identical 13-digit format,
    * so one rule covers both.
    */
@@ -106,7 +106,7 @@
   }
 
   /**
-   * Email. Deliberately a pragmatic pattern, not RFC 5322 — the goal is to
+   * Email. Deliberately a pragmatic pattern, not RFC 5322 - the goal is to
    * reject "hello" and "a@b", not to litigate exotic-but-legal addresses.
    * Always lowercased, because User lookups are done on the lowercased form
    * and a mixed-case duplicate would slip past the unique index check.
@@ -125,7 +125,7 @@
 
   /**
    * A person's name. Allows unicode letters (so "Ayesha Noor" and names with
-   * accents both work), spaces, apostrophes, hyphens and dots — and requires at
+   * accents both work), spaces, apostrophes, hyphens and dots - and requires at
    * least two actual letters, which is what rejects "1", "..." and "".
    */
   function normalizePersonName(raw, label) {
@@ -159,7 +159,7 @@
     return { ok: true, value, error: null };
   }
 
-  /** Roll number / staff id — uppercased, alphanumeric plus - and /. */
+  /** Roll number / staff id - uppercased, alphanumeric plus - and /. */
   function normalizeRollNo(raw) {
     if (raw === null || raw === undefined) return { ok: false, value: '', error: 'Roll number is required.' };
     const value = String(raw).trim().toUpperCase().replace(/\s+/g, '');
@@ -241,6 +241,9 @@
         : { ok: true, value: '', error: null };
     }
     const value = String(raw).trim().replace(/[ \t]+/g, ' ');
+    if (/[<>]/.test(value)) {
+      return { ok: false, value: '', error: label + ' cannot contain < or >.' };
+    }
     // `required` is opt-in so every existing caller keeps treating blank as an
     // acceptable empty string. Without it, a route that genuinely needs the
     // field had to write its own emptiness check next to this call, and half of
@@ -257,7 +260,7 @@
     return { ok: true, value, error: null };
   }
 
-  /** One of a fixed set. This is what makes a <select> trustworthy — a select
+  /** One of a fixed set. This is what makes a <select> trustworthy - a select
    *  in the browser is just a suggestion; the server has to enforce it.
    *
    *  Pass `default` to make the field optional: a blank value resolves to the
@@ -301,7 +304,7 @@
   }
 
   /** Escape for use inside a single-quoted JS string in an inline onclick=""
-   *  attribute — e.g. onclick="removeSubject('${jsAttr(name)}')". */
+   *  attribute - e.g. onclick="removeSubject('${jsAttr(name)}')". */
   function escapeJsAttr(raw) {
     if (raw === null || raw === undefined) return '';
     return String(raw).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;')
@@ -319,7 +322,7 @@
    * Only allow through the keys explicitly listed.
    *
    * Every write route in this project used to do `Model.create(req.body)` or
-   * `findOneAndUpdate(id, req.body)`, which lets a caller set ANY field — a
+   * `findOneAndUpdate(id, req.body)`, which lets a caller set ANY field - a
    * student could PUT {attendance: 100, feeStatus: 'Paid', enrolledCourseIds:
    * [1,2,3]} to their own record. Whitelist first, always.
    */
@@ -364,7 +367,7 @@
    *
    * rules is { fieldName: { type, label, required, ...typeOptions } }
    *
-   * options.partial — when true, fields absent from `input` are skipped rather
+   * options.partial - when true, fields absent from `input` are skipped rather
    * than reported as missing. Use it for PATCH-style partial updates. Note that
    * a field which IS present is still fully validated.
    */
@@ -388,7 +391,7 @@
         } else if (rule.default !== undefined) {
           values[field] = rule.default;
         } else {
-          // Optional and empty — store an explicit empty so a cleared field
+          // Optional and empty - store an explicit empty so a cleared field
           // actually clears in the DB instead of keeping its old value.
           values[field] = rule.type === 'int' ? null : '';
         }
@@ -488,7 +491,7 @@
         errors.feeStatus = 'Fee status is "Paid" but the paid amount is less than the total fee.';
       }
       if (values.feeStatus === 'Pending' && values.paidAmount > 0) {
-        errors.feeStatus = 'Fee status is "Pending" but some amount has already been paid — use "Partial".';
+        errors.feeStatus = 'Fee status is "Pending" but some amount has already been paid - use "Partial".';
       }
     }
     return errors;

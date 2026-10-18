@@ -6,7 +6,7 @@ const thresholdRowSchema = new mongoose.Schema({
 }, { _id: false });
 
 const gradeThresholdSchema = new mongoose.Schema({
-  // singleton doc — always query/update the one row, e.g. findOneAndUpdate({}, ...)
+  // singleton doc - always query/update the one row, e.g. findOneAndUpdate({}, ...)
   thresholds: {
     type: [thresholdRowSchema],
     default: [

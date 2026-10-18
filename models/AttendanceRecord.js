@@ -18,7 +18,7 @@ const attendanceRecordSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // One record per course per day. Resubmitting the same course+date CORRECTS
-// that day rather than creating a duplicate — see routes/attendance.js's
+// that day rather than creating a duplicate - see routes/attendance.js's
 // upsert. Student.attendance/attendanceDetail are fully recomputed from these
 // records every time, never incrementally bumped, so a correction can never
 // double-count or drift out of sync with reality.

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Login — Mind Route</title>
+  <title>Sign In | Mind Route</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
   <div class="auth-left">
     <div class="auth-left-content">
       <div class="auth-brand-hero">
-        <div class="logo"><div class="logo-icon">🧠</div><div><span>MIND ROUTE</span><span class="logo-sub">Student Portal</span></div></div>
+        <div class="logo"><div class="logo-icon">MR</div><div><span>MIND ROUTE</span><span class="logo-sub">Student Portal</span></div></div>
       </div>
       <div class="auth-tagline">Your brain.<br><span>Your route.</span><br>Your future.</div>
       <p class="auth-sub">Login to access your courses, track your progress, submit assignments, and stay updated with live class notifications.</p>
@@ -51,7 +51,7 @@
         (routes/auth.js destructures only { email, password }), and the redirect
         below branches on the role the *server* returns. Its only effect was to
         let a correct-credentials login fail because the user picked the wrong
-        item, and — much worse — to leak information. See the comment block on
+        item, and - much worse - to leak information. See the comment block on
         doLogin() for the full explanation.
 
         Your role is determined by your account, not by a dropdown.
@@ -65,6 +65,13 @@
 <script src="js/validation.js"></script>
 <script src="js/app.js"></script>
 <script>
+
+  // Already signed in (typed URL, Forward button)? Go to the dashboard instead.
+  (function () {
+    const homes = { student: 'Student/dashboard.html', teacher: 'Teacher/dashboard.html', admin: 'Admin/dashboard.html' };
+    const s = getSession();
+    if (s && getToken() && homes[s.role]) window.location.replace(homes[s.role]);
+  })();
 /*
   WHY THE ROLE DROPDOWN IS GONE
   ─────────────────────────────
@@ -78,7 +85,7 @@
 
   That check only ran AFTER the server had already confirmed the email and
   password were correct. So the message was, in effect, "your password is
-  right, but you picked the wrong role" — a free confirmation that a guessed
+  right, but you picked the wrong role" - a free confirmation that a guessed
   password was valid. Try 'student', get told no; try 'teacher', get told no;
   it's an admin. Three roles, so at most three clicks to identify any account.
 
@@ -89,7 +96,7 @@
 
   The fix is structural, not cosmetic: there is no role input any more. The
   server decides the role, the client only reads it to pick a landing page, and
-  every failure — unknown email, wrong password, rate limited — produces the
+  every failure - unknown email, wrong password, rate limited - produces the
   same message. Do not reintroduce a role selector here.
 */
 
@@ -101,7 +108,7 @@ let loginInFlight = false;
 function showLoginError(msg) {
   const err = document.getElementById('login-err');
   err.style.display = 'block';
-  err.textContent = '❌ ' + msg;
+  err.textContent = msg;
 }
 
 async function doLogin() {
@@ -117,7 +124,7 @@ async function doLogin() {
 
   err.style.display = 'none';
 
-  // Client-side checks are for the user's benefit only — to save a round trip
+  // Client-side checks are for the user's benefit only - to save a round trip
   // and give an instant, specific message. The server repeats all of them,
   // because anything checked only in the browser isn't checked at all.
   if (!email || !pass) {
@@ -148,7 +155,7 @@ async function doLogin() {
     const homes = {
       student: 'Student/dashboard.html',
       teacher: 'Teacher/dashboard.html',
-      // Admin/index.html is the retired SPA shell — go straight to the real page.
+      // Admin/index.html is the retired SPA shell - go straight to the real page.
       admin:   'Admin/dashboard.html',
     };
     const dest = homes[data.user.role];
@@ -177,8 +184,8 @@ async function doLogin() {
 }
 
 // Enter submits, but only from inside the two inputs. The old version bound
-// keydown on `document`, so Enter anywhere on the page — including on the
-// disabled button or the "Back to Homepage" link — re-fired doLogin().
+// keydown on `document`, so Enter anywhere on the page - including on the
+// disabled button or the "Back to Homepage" link - re-fired doLogin().
 ['email', 'password'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); doLogin(); }

@@ -8,7 +8,7 @@ isn't showing up somewhere it should.
 ## 0. One-time: re-seed the database
 
 **You must do this before anything else works.** The old seed data had a broken
-teacher record, and there was no batch at all — which is why the teacher and
+teacher record, and there was no batch at all - which is why the teacher and
 student pages were blank.
 
 ```
@@ -38,20 +38,20 @@ page. If any of those is empty, jump to the troubleshooting table at the bottom.
 
 1. Log in as admin. You now land on **Admin/dashboard.html**. (Previously admin
    login landed on `Admin/index.html`, a retired page whose menu had no Courses
-   entry — that's why there seemed to be no way to create a course.)
+   entry - that's why there seemed to be no way to create a course.)
 2. Click **Courses** in the left sidebar.
 3. Click **Add Course** in the top bar.
 4. Fill in the form:
-   - **Title** — free text, e.g. "MDCAT Physics Intensive".
-   - **Subject** — pick from the dropdown. This is the single most important
+   - **Title** - free text, e.g. "MDCAT Physics Intensive".
+   - **Subject** - pick from the dropdown. This is the single most important
      field; see the warning below.
-   - **Teacher** — who will build and own the curriculum. The dropdown shows
+   - **Teacher** - who will build and own the curriculum. The dropdown shows
      each teacher's subjects in brackets so you can avoid assigning a teacher
      to a subject they don't teach. Can be left unassigned for now.
-   - **Icon** — one character, shown on the course card. Defaults to the first
+   - **Icon** - one character, shown on the course card. Defaults to the first
      letter of the subject.
-   - **Colour** — one of five presets; the light tint is derived automatically.
-   - **Description** — one or two lines, shown on the card.
+   - **Colour** - one of five presets; the light tint is derived automatically.
+   - **Description** - one or two lines, shown on the card.
 5. **Save Course.**
 
 ### The Subject field decides whether anyone can see the course
@@ -76,7 +76,7 @@ Subject matching is **exact and case-sensitive**. `physics` will not match
 **Admin edits the shell.** On the Courses page, click **Edit** on any course
 card. You can change the title, subject, teacher, icon, colour and description.
 
-Admin editing deliberately **cannot touch weeks or topics** — the save payload
+Admin editing deliberately **cannot touch weeks or topics** - the save payload
 omits the `weeks` field entirely, so an admin rename can never wipe the
 teacher's curriculum.
 
@@ -113,7 +113,7 @@ Student sees it · Teacher sees it
 ```
 
 Enrollment happens automatically in `routes/batches.js` via
-`enrollStudentsInBatchCourses()` — on batch **create** and, as of this fix, on
+`enrollStudentsInBatchCourses()` - on batch **create** and, as of this fix, on
 batch **edit** too. Previously, adding a student to an existing batch never
 enrolled them in anything.
 
@@ -124,7 +124,7 @@ ids in their own `courseIds`.
 ### If you create a course *after* students already exist
 
 The course won't retroactively appear for them. Open **Admin → Batches**, edit
-the relevant batch, and save it — that re-runs enrollment and picks up the new
+the relevant batch, and save it - that re-runs enrollment and picks up the new
 course.
 
 ---
@@ -143,7 +143,7 @@ course.
 ### The `subjects` vs `subject` trap
 
 `models/Teacher.js` defines the field as **`subjects`** (plural, an array).
-Writing `subject:` instead means Mongoose **silently discards it** — no error, no
+Writing `subject:` instead means Mongoose **silently discards it** - no error, no
 warning. The teacher ends up with no subjects, no batch can meaningfully assign
 them, and their Courses page renders empty. That exact one-character typo in
 `seed.js` was the original bug behind "for teacher there is no course."

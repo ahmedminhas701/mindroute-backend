@@ -11,6 +11,7 @@ const { protect, restrictTo } = require('../middleware/auth');
 const V = require('../utils/validate');
 const { nextId } = require('../utils/nextId');
 const { getSubjectNames, resolveSubjectsOr400 } = require('../utils/subjects');
+const { syncBatchCourseTeachers } = require('../utils/courseSync');
 
 router.use(protect);
 
@@ -21,19 +22,23 @@ const TEACHER_WRITABLE = Object.keys(V.TEACHER_RULES);
 // Server-side port of getTeacherCourseIds() (app.js §4).
 // A teacher is linked to a course two ways: directly via teacher.courseIds, or
 // indirectly via a batch's subjectTeachers map. This merges both.
+// async function resolveTeacherCourseIds(teacher) {
+//   const ids = new Set(teacher.courseIds || []);
+//   const [batches, courses] = await Promise.all([Batch.find({}), Course.find({})]);
+//   batches.forEach(b => {
+//     if (!b.subjectTeachers) return;
+//     const map = b.subjectTeachers instanceof Map ? b.subjectTeachers : new Map(Object.entries(b.subjectTeachers));
+//     map.forEach((tid, subject) => {
+//       if (tid === teacher.id) {
+//         courses.forEach(c => { if (c.subject === subject) ids.add(c.id); });
+//       }
+//     });
+//   });
+//   return [...ids];
+// }
 async function resolveTeacherCourseIds(teacher) {
-  const ids = new Set(teacher.courseIds || []);
-  const [batches, courses] = await Promise.all([Batch.find({}), Course.find({})]);
-  batches.forEach(b => {
-    if (!b.subjectTeachers) return;
-    const map = b.subjectTeachers instanceof Map ? b.subjectTeachers : new Map(Object.entries(b.subjectTeachers));
-    map.forEach((tid, subject) => {
-      if (tid === teacher.id) {
-        courses.forEach(c => { if (c.subject === subject) ids.add(c.id); });
-      }
-    });
-  });
-  return [...ids];
+  const owned = await Course.find({ teacher: teacher.id }, { id: 1 }).lean();
+  return owned.map(c => c.id);
 }
 
 /** Validate + normalise a teacher payload. Returns null after sending a 400. */
@@ -49,7 +54,7 @@ async function cleanTeacherBody(res, body, { partial = false } = {}) {
   // Not part of the rule engine because validity depends on the database, not on
   // a pattern. Resolving through the Subject collection is what guarantees the
   // stored spelling exactly matches what Course.subject and
-  // Batch.subjectTeachers will be compared against — see utils/subjects.js for
+  // Batch.subjectTeachers will be compared against - see utils/subjects.js for
   // why an exact match matters so much here.
   const sendingSubjects = Object.prototype.hasOwnProperty.call(body, 'subjects');
   if (sendingSubjects || !partial) {
@@ -74,19 +79,17 @@ async function cleanTeacherBody(res, body, { partial = false } = {}) {
 router.get('/', async (req, res) => {
   try {
     const { search } = req.query;
+    const isAdmin = req.user.role === 'admin';
     let filter = {};
     if (search) {
-      // Two fixes here. escapeRegex stops a search like "(a+)+$" from pinning
-      // the event loop (see routes/students.js for the longer note), and the
-      // field is `subjects`, not `subject` — the old query searched a field that
-      // stopped existing when teachers gained multiple subjects, so searching
-      // for "Biology" matched nothing and looked like there were no Biology
-      // teachers at all.
       const re = new RegExp(V.escapeRegex(String(search).slice(0, 80)), 'i');
-      filter = { $or: [{ name: re }, { subjects: re }, { email: re }, { qualification: re }] };
+      filter = isAdmin
+        ? { $or: [{ name: re }, { subjects: re }, { email: re }, { qualification: re }] }
+        : { $or: [{ name: re }, { subjects: re }] };
     }
-    const teachers = await Teacher.find(filter).sort({ name: 1 });
-    res.json(teachers);
+    let q = Teacher.find(filter).sort({ name: 1 });
+    if (!isAdmin) q = q.select('id name subjects status');
+    res.json(await q);
   } catch (err) {
     console.error('GET /teachers failed:', err);
     res.status(500).json({ message: 'Failed to fetch teachers.' });
@@ -105,7 +108,7 @@ router.get('/me', restrictTo('teacher'), async (req, res) => {
   }
 });
 
-// GET /api/teachers/options — dropdown data for the Add/Edit Teacher modal.
+// GET /api/teachers/options - dropdown data for the Add/Edit Teacher modal.
 // Subjects come from the DB; the rest come from the same arrays the server
 // validates against, so the form and the validator can never disagree.
 router.get('/options', restrictTo('admin'), async (req, res) => {
@@ -127,11 +130,15 @@ router.get('/:id', restrictTo('admin', 'teacher'), async (req, res) => {
   try {
     const teacher = await Teacher.findOne({ id: req.params.id });
     if (!teacher) return res.status(404).json({ message: 'Teacher not found.' });
+    if (req.user.role === 'teacher' && req.user.email !== teacher.email) {
+      return res.status(403).json({ message: 'Not your record.' });
+    }
     res.json(teacher);
   } catch (err) {
     console.error('GET /teachers/:id failed:', err);
     res.status(500).json({ message: 'Failed to load teacher.' });
   }
+  
 });
 
 // GET /api/teachers/:id/courses
@@ -195,15 +202,15 @@ router.get('/:id/pending-grading', restrictTo('admin', 'teacher'), async (req, r
   }
 });
 
-// POST /api/teachers — profile + matching User login, with rollback.
+// POST /api/teachers - profile + matching User login, with rollback.
 router.post('/', restrictTo('admin'), async (req, res) => {
   const values = await cleanTeacherBody(res, req.body);
   if (!values) return;
 
   const password = typeof req.body.password === 'string' ? req.body.password : undefined;
-  if (password !== undefined && password.length < 6) {
+  if (password !== undefined && password.length < 8) {
     return res.status(400).json({
-      message: 'Password must be at least 6 characters (or leave it blank to generate one).',
+      message: 'Password must be at least 8 characters (or leave it blank to generate one).',
       errors: { password: 'Password must be at least 6 characters.' },
     });
   }
@@ -272,7 +279,7 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
     }
 
     // Dropping a subject a teacher is still assigned to in a batch would leave
-    // that batch pointing at a teacher who no longer teaches it — the course
+    // that batch pointing at a teacher who no longer teaches it - the course
     // then silently stops appearing for them. Warn instead of corrupting.
     if (values.subjects) {
       const removed = (existing.subjects || []).filter(s => !values.subjects.includes(s));
@@ -288,10 +295,10 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
             }
           });
         });
-        if (conflicts.length && req.query.force !== 'true') {
+        if (conflicts.length) {
           return res.status(409).json({
             message: `${existing.name} is still assigned to ${conflicts.join(', ')}. ` +
-                     `Reassign those first, or resend with ?force=true to remove the subject anyway.`,
+                     `Reassign those on the Batches page first.`,
             conflicts,
           });
         }
@@ -315,7 +322,22 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
   }
 });
 
-// DELETE /api/teachers/:id — profile, login, and every batch assignment.
+
+// POST /api/teachers/:id/reset-password — admin issues a new temporary password.
+router.post('/:id/reset-password', restrictTo('admin'), async (req, res) => {
+  try {
+    const teacher = await Teacher.findOne({ id: req.params.id }, { email: 1 }).lean();
+    if (!teacher) return res.status(404).json({ message: 'Teacher not found.' });
+    const { tempPassword } = await createUserAccount.resetPassword(teacher.email);
+    res.json({ email: teacher.email, tempPassword });
+  } catch (err) {
+    console.error('POST /teachers/:id/reset-password failed:', err);
+    res.status(400).json({ message: 'Could not reset the password. The login account may be missing.' });
+  }
+});
+
+
+// DELETE /api/teachers/:id - profile, login, and every batch assignment.
 router.delete('/:id', restrictTo('admin'), async (req, res) => {
   try {
     const teacher = await Teacher.findOne({ id: req.params.id });
@@ -342,6 +364,7 @@ router.delete('/:id', restrictTo('admin'), async (req, res) => {
       map.forEach((tid, subject) => { if (tid !== teacher.id) plain[subject] = tid; });
       b.subjectTeachers = plain;
       await b.save();
+      await syncBatchCourseTeachers(b);
     }
 
     if (orphaned.length && req.query.force !== 'true') {

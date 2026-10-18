@@ -11,7 +11,7 @@ const Subject = require('../models/Subject');
 //   teacher.subjects.includes(course.subject)                (teacher's courses)
 //
 // So "Biology", "biology" and "Biology " are three different subjects as far as
-// the code is concerned. There is no error when they disagree — the join just
+// the code is concerned. There is no error when they disagree - the join just
 // finds nothing, and a course silently disappears from the student's and the
 // teacher's course list. That is the single most confusing failure mode in this
 // project, and it was reachable from four different free-text inputs.

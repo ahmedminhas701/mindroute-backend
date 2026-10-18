@@ -12,7 +12,7 @@ const { recomputeStudentAttendance } = require('../utils/recomputeAttendance');
 
 router.use(protect);
 
-// Same ownership shape as mayEditCurriculum() in routes/courses.js — a
+// Same ownership shape as mayEditCurriculum() in routes/courses.js - a
 // teacher may only take attendance for a course they actually teach.
 async function mayTakeAttendance(req, res, course) {
   if (req.user.role === 'admin') return true;
@@ -32,7 +32,7 @@ async function mayTakeAttendance(req, res, course) {
   return false;
 }
 
-// GET /api/attendance/roster/:courseId — everyone enrolled, for the "take
+// GET /api/attendance/roster/:courseId - everyone enrolled, for the "take
 // attendance" checklist.
 router.get('/roster/:courseId', restrictTo('admin', 'teacher'), async (req, res) => {
   try {
@@ -49,7 +49,7 @@ router.get('/roster/:courseId', restrictTo('admin', 'teacher'), async (req, res)
   }
 });
 
-// GET /api/attendance/:courseId/:date — load an existing day's record, so
+// GET /api/attendance/:courseId/:date - load an existing day's record, so
 // "take attendance" for a date already marked opens pre-filled for correction.
 router.get('/:courseId/:date', restrictTo('admin', 'teacher'), async (req, res) => {
   try {
@@ -73,13 +73,15 @@ router.post('/', restrictTo('admin', 'teacher'), async (req, res) => {
     if (!course) return res.status(400).json({ message: 'That course does not exist.' });
     if (!(await mayTakeAttendance(req, res, course))) return;
 
-    const dateR = V.normalizeDate(req.body.date, { label: 'Class date' });
+    const dateR = V.normalizeDate(req.body.date, { label: 'Class date', mustBePast: true })
+    
     if (!dateR.ok) return res.status(400).json({ message: dateR.error });
 
     const roster = await Student.find({ enrolledCourseIds: courseId }, { id: 1 }).lean();
     const rosterIds = new Set(roster.map(s => s.id));
 
     const incoming = Array.isArray(req.body.entries) ? req.body.entries : [];
+    if (incoming.length > 500) return res.status(400).json({ message: 'Too many entries.' });
     if (!incoming.length) return res.status(400).json({ message: 'Mark at least one student.' });
 
     const entries = [];

@@ -84,7 +84,7 @@ const studentSchema = new mongoose.Schema({
   // an unhandled 500.
   id:     { type: String, required: true, unique: true, trim: true },
   name:   { type: String, required: [true, 'Full name is required.'], trim: true, minlength: 2, maxlength: 60 },
-  rollNo: { type: String, required: [true, 'Roll number is required.'], trim: true, uppercase: true, maxlength: 20 },
+  rollNo: { type: String, required: [true, 'Roll number is required.'], trim: true, uppercase: true, maxlength: 20 , unique: true },
   email:  {
     type: String, required: [true, 'Email is required.'], unique: true,
     lowercase: true, trim: true, validate: emailValidator,
@@ -128,7 +128,7 @@ const studentSchema = new mongoose.Schema({
   lastTopic:     { type: Map, of: String,  default: {} },   // courseId (string) -> topicId
 }, { timestamps: true });
 
-// Derived, never stored — keeps "how much is still owed" in one place instead
+// Derived, never stored - keeps "how much is still owed" in one place instead
 // of being recomputed inline on the fees page, the dashboard and the admin table.
 studentSchema.virtual('balance').get(function () {
   return Math.max(0, (this.totalFee || 0) - (this.paidAmount || 0));

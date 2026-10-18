@@ -23,7 +23,7 @@ async function nextId(sequenceName, prefix, width = 3) {
 
 /**
  * Fast-forward a sequence so it sits above every id already in a collection.
- * Safe to call repeatedly — it only ever moves the counter up.
+ * Safe to call repeatedly - it only ever moves the counter up.
  *
  *   await seedCounter('student', Student, 'S')
  */
