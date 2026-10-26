@@ -7,7 +7,6 @@ const multer = require('multer');
 const compression = require('compression');
 const app = express();
 
-app.use('/api/attendance', require('./routes/attendance'));
 
 // ── What was wrong with this file ────────────────────────────────────────────
 //
@@ -85,6 +84,7 @@ app.use('/api/schedule', require('./routes/schedule'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/subjects', require('./routes/subjects'));
+app.use('/api/attendance', require('./routes/attendance'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
@@ -127,35 +127,36 @@ app.use((err, req, res, next) => {
 // ── Start ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 
-// Fail loudly instead of connecting to undefined and timing out with a confusing
-// "MongoParseError". Same for JWT_SECRET: without it every jwt.verify() throws
-// and every request 401s, which looks like a login bug rather than missing config.
-if (!process.env.MONGO_URI) {
-  console.error('MONGO_URI is not set. Add it to .env as a single unbroken line, with no quotes.');
-  process.exit(1);
-}
-if (!process.env.JWT_SECRET) {
-  console.error('JWT_SECRET is not set. Add any long random string to .env - without it no login can succeed.');
-  process.exit(1);
-}
-
-if (IS_PROD && process.env.JWT_SECRET.length < 32) {
-  console.error('JWT_SECRET is too short for production. Use at least 32 random characters.');
-  process.exit(1);
-}
-
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('MongoDB connected.');
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Open the app at http://localhost:${PORT}/login.html`);
-    });
-  })
-  .catch(err => {
-    console.error('MongoDB connection failed:', err.message);
+if (require.main === module) {
+  if (!process.env.MONGO_URI) {
+    console.error('MONGO_URI is not set. Add it to .env as a single unbroken line, with no quotes.');
     process.exit(1);
-  });
+  }
+  if (!process.env.JWT_SECRET) {
+    console.error('JWT_SECRET is not set. Add any long random string to .env - without it no login can succeed.');
+    process.exit(1);
+  }
+
+  if (IS_PROD && process.env.JWT_SECRET.length < 32) {
+    console.error('JWT_SECRET is too short for production. Use at least 32 random characters.');
+    process.exit(1);
+  }
+
+  mongoose.connect(process.env.MONGO_URI)
+    .then(() => {
+      console.log('MongoDB connected.');
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+        console.log(`Open the app at http://localhost:${PORT}/login.html`);
+      });
+    })
+    .catch(err => {
+      console.error('MongoDB connection failed:', err.message);
+      process.exit(1);
+    });
+}
+
+module.exports = app;
 
 // if (!process.env.MONGO_URI) {
 //   console.error('MONGO_URI is not set...');

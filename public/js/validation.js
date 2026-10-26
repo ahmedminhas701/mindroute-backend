@@ -510,6 +510,7 @@
     toInt: toInt,
     // escaping / safety
     escapeHtml: escapeHtml,
+    esc: escapeHtml,
     escapeJsAttr: escapeJsAttr,
     escapeRegex: escapeRegex,
     pick: pick,

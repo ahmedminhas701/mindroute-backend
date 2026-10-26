@@ -1,3 +1,4 @@
+const esc = s => String(s == null ? '' : s);
 const express = require('express');
 const router = express.Router();
 

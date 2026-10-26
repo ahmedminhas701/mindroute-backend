@@ -1,3 +1,4 @@
+const esc = s => String(s == null ? '' : s);
 const Course = require('../models/Course');
 const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');

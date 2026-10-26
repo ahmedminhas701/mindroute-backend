@@ -116,10 +116,8 @@
           onclick="filterNotifs('upload',this)">Materials</button>
         <button class="notif-filter-btn" data-filter="due"
           onclick="filterNotifs('due',this)">Deadlines</button>
-        <button class="notif-filter-btn" data-filter="live"
-          onclick="filterNotifs('live',this)">Classes</button>
         <button class="notif-filter-btn" data-filter="schedule"
-          onclick="filterNotifs('schedule',this)">Schedule</button>
+          onclick="filterNotifs('schedule',this)">Classes</button>
         <button class="notif-filter-btn" data-filter="unread"
           onclick="filterNotifs('unread',this)">Unread</button>
         <span id="notif-page-count"
@@ -188,7 +186,7 @@
 
     list.innerHTML = items.map(n => `
       <div class="notif-page-item ${n.read ? '' : 'unread'}"
-        onclick="markOneRead('${n.id}')">
+        onclick="markOneRead('${n._id || n.id}')">
         <div class="notif-type-dot"
           style="background:${typeColors[n.type] || '#1B5FAD'}"></div>
         <div style="flex:1;min-width:0">
@@ -198,7 +196,7 @@
                          color:${typeColors[n.type] || '#1B5FAD'}">
               ${typeLabels[n.type] || n.type}
             </span>
-            <span class="notif-page-time">${n.time}</span>
+            <span class="notif-page-time">${n.time || (n.createdAt ? timeAgo(n.createdAt) : '')}</span>
           </div>
           <div class="notif-page-title">${n.title}</div>
           <div class="notif-page-body">${n.body}</div>
@@ -216,16 +214,23 @@
     renderNotifPage();
   }
 
-  function markOneRead(id) {
-    const n = NOTIFICATIONS.find(x => x.id === id);
-    if (n) { n.read = true; saveNotifs(); renderNotifBell(); renderNotifPage(); }
+  async function markOneRead(id) {
+    const n = NOTIFICATIONS.find(x => String(x._id || x.id) === String(id));
+    if (n && !n.read) {
+      try {
+        await apiFetch(`/notifications/${n._id || n.id}/read`, { method: 'PATCH' });
+        n.read = true;
+        renderNotifBell();
+        if (typeof updateNavBadge === 'function') updateNavBadge();
+        renderNotifPage();
+      } catch (err) {
+        showToast(err.message);
+      }
+    }
   }
 
-  function markAllReadAndRender() {
-    NOTIFICATIONS.forEach(n => n.read = true);
-    saveNotifs();
-    renderNotifBell();
-    renderNotifPage();
+  async function markAllReadAndRender() {
+    await markAllRead();
   }
 
   document.addEventListener('DOMContentLoaded', renderNotifPage);
