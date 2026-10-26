@@ -532,6 +532,8 @@ router.put('/:id/weeks/:wi/topics/:ti/contents/:ci', restrictTo('admin', 'teache
     if (!content) return;
 
     const { field, value } = req.body;
+    const prevUrl = String(content.url || '');
+
     const allowed = CONTENT_EDITABLE[content.type] || [];
     if (!V.isSafeKey(field) || !allowed.includes(field)) {
       return res.status(400).json({
@@ -560,6 +562,9 @@ router.put('/:id/weeks/:wi/topics/:ti/contents/:ci', restrictTo('admin', 'teache
 
     course.markModified('weeks');
     await course.save();
+    if (field === 'url' && !prevUrl && content.url) {
+      await notifyCourseStudents(course.id, { type: 'upload', title: 'New material', body: `${course.title}: "${content.label || content.type}" is now available.` });
+    }
     res.json(course);
   } catch (err) {
     console.error('PUT content failed:', err);

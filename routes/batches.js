@@ -17,6 +17,21 @@ const {
 } = require('../utils/courseSync');
 const { notifyStudents, notifyTeacher } = require('../utils/notify');
 
+/** Tells teachers about subject assignments that changed. Subjects that already have a course are
+ *  skipped, because syncBatchCourseTeachers already sends a more specific "course" notice. */
+async function notifyTeacherAssignments(oldMap, newMap, batchName, skipSubjects) {
+  const subjects = new Set([...Object.keys(oldMap || {}), ...Object.keys(newMap || {})]);
+  for (const subject of subjects) {
+    if (skipSubjects.has(subject)) continue;
+    const was = (oldMap || {})[subject] || '';
+    const now = (newMap || {})[subject] || '';
+    if (was === now) continue;
+    if (now) await notifyTeacher(now, { type: 'change', title: 'Subject assigned', body: `You have been assigned to teach ${subject} in ${batchName}.` });
+    if (was) await notifyTeacher(was, { type: 'change', title: 'Subject unassigned', body: `You are no longer assigned to teach ${subject} in ${batchName}.` });
+  }
+}
+
+
 router.use(protect);
 
 function serialize(batch) {
@@ -195,6 +210,7 @@ router.post('/', restrictTo('admin'), async (req, res) => {
         { id: { $in: cleaned.values.studentIds } },
         { $set: { batch: cleaned.values.name, entryTest: cleaned.values.entryTest } }
       );
+      await notifyTeacherAssignments({}, cleaned.values.subjectTeachers, cleaned.values.name, new Set());
       await notifyStudents(cleaned.values.studentIds, { type: 'change', title: 'Added to a batch', body: `You have been added to ${cleaned.values.name}. Your courses will appear on the Courses page.` });
     }
     // No enrolment here: a brand-new batch has no courses yet. Courses are
@@ -213,6 +229,7 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
     if (!existing) return res.status(404).json({ message: 'Batch not found.' });
 
     const oldStudentIds = [...existing.studentIds];
+    const oldTeachers = serialize(existing).subjectTeachers || {};
     const oldName = existing.name;
     const oldEntryTestId = existing.entryTestId;
 
@@ -259,6 +276,8 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
 
     await enrollStudentsInBatchCourses(newStudentIds, existing.id);
     await syncBatchCourseTeachers(existing);
+    const withCourse = new Set((await Course.find({ batchId: existing.id }, { subject: 1 }).lean()).map(c => c.subject));
+    await notifyTeacherAssignments(oldTeachers, cleaned.values.subjectTeachers, cleaned.values.name, withCourse);
     const added = newStudentIds.filter(id => !oldStudentIds.includes(id));
     if (added.length)   await notifyStudents(added,   { type: 'change', title: 'Added to a batch', body: `You have been added to ${cleaned.values.name}. Your courses will appear on the Courses page.` });
     if (removed.length) await notifyStudents(removed, { type: 'change', title: 'Removed from a batch', body: `You are no longer in ${oldName}, and its courses are no longer available to you.` });

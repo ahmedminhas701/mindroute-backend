@@ -3,177 +3,83 @@ const mongoose = require('mongoose');
 const router = express.Router();
 
 const Notification = require('../models/Notification');
-const User = require('../models/User');
-const { protect, restrictTo } = require('../middleware/auth');
-const V = require('../utils/validate');
+const { protect } = require('../middleware/auth');
 
 router.use(protect);
 
-// ── What was wrong with this file ────────────────────────────────────────────
-//
-// 1. POST took `userId` straight from the request body:
-//
-//        userId: userId || req.user._id
-//
-//    so ANY logged-in user - a student included - could post a notification
-//    into any other account's bell by supplying that account's id. Since the
-//    bell renders the title and body, that is a channel for sending arbitrary
-//    messages that appear to come from the academy. Only admins and teachers
-//    may now address someone else; a student's POST is always filed against
-//    their own id, whatever the body says.
-//
-// 2. `type`, `title` and `body` were stored unvalidated and unbounded. A
-//    notification with no title rendered as an empty row in the dropdown that
-//    still counted toward the unread badge, so the badge showed "3" over a list
-//    that looked like it had one item in it.
-//
-// 3. No route had a try/catch. A malformed :id (anything that isn't a 24-char
-//    ObjectId) makes Mongoose throw a CastError, which surfaced as a bare 500
-//    with a stack-trace message rather than "Notification not found."
-//
-// Ownership itself was already handled correctly: every query is scoped by
-// `userId: req.user._id`, so nobody could read or mark another user's items.
-// That scoping is kept and made explicit below.
+const owner = req => String(req.user._id);
+const clean = (s, max) => String(s == null ? '' : s).replace(/[<>]/g, '').trim().slice(0, max);
 
-const TYPES = [
-  'assignment', 'grade', 'schedule', 'fee', 'announcement', 'system',
-  'upload', 'due', 'live', 'change', 'overdue', 'quiz',
-];
-
-/** True if `v` could be a Mongoose ObjectId, so we can 404 instead of throwing. */
-function isObjectId(v) {
-  return mongoose.Types.ObjectId.isValid(String(v || '')) && String(v).length === 24;
-}
-
-// GET /api/notifications - only ever the caller's own.
+// GET /api/notifications - the caller's own, newest first
 router.get('/', async (req, res) => {
   try {
-    const notifs = await Notification.find({ userId: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(100)      // the bell shows a handful; an unbounded find grows forever
-      .lean();
-    res.json(notifs);
+    const list = await Notification.find({ userId: owner(req) })
+      .sort({ createdAt: -1 }).limit(100)
+      .select('type title body read createdAt').lean();
+    res.json(list.map(n => ({ ...n, read: !!n.read })));
   } catch (err) {
     console.error('GET /notifications failed:', err);
     res.status(500).json({ message: 'Failed to load notifications.' });
   }
 });
 
-// GET /api/notifications/unread-count
-router.get('/unread-count', async (req, res) => {
+// PATCH /api/notifications/read-all
+const markAll = async (req, res) => {
   try {
-    const count = await Notification.countDocuments({ userId: req.user._id, read: false });
-    res.json({ count });
+    const r = await Notification.updateMany({ userId: owner(req), read: { $ne: true } }, { $set: { read: true } });
+    res.json({ updated: r.modifiedCount });
   } catch (err) {
-    console.error('GET /notifications/unread-count failed:', err);
-    res.status(500).json({ message: 'Failed to count notifications.' });
+    console.error('PATCH read-all failed:', err);
+    res.status(500).json({ message: 'Failed to update notifications.' });
+  }
+};
+router.patch('/read-all', markAll);
+router.patch('/mark-all-read', markAll);   // alias for older client code
+
+// PATCH /api/notifications/:id/read
+router.patch('/:id/read', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid notification id.' });
+    const r = await Notification.updateOne({ _id: req.params.id, userId: owner(req) }, { $set: { read: true } });
+    if (!r.matchedCount) return res.status(404).json({ message: 'Notification not found.' });
+    res.json({ message: 'Marked as read.' });
+  } catch (err) {
+    console.error('PATCH read failed:', err);
+    res.status(500).json({ message: 'Failed to update the notification.' });
   }
 });
 
-// POST /api/notifications
+// POST /api/notifications - creates a notification for the CALLER only
 router.post('/', async (req, res) => {
   try {
-    const errors = {};
-
-    const title = V.normalizeText(req.body.title, { label: 'Title', required: true, min: 2, max: 120 });
-    if (!title.ok) errors.title = title.error;
-
-    const body = V.normalizeText(req.body.body, { label: 'Message', max: 1000 });
-    if (!body.ok) errors.body = body.error;
-
-    // Free-text types produced unstyled bell rows, because the client picks an
-    // icon per known type and had no fallback.
-    const type = V.normalizeEnum(req.body.type, { label: 'Type', values: TYPES, default: 'system' });
-    if (!type.ok) errors.type = type.error;
-
-    // Targeting someone else is a privileged action. This is the actual fix for
-    // the hole described at the top of the file.
-    let target = String(req.user._id);
-    if (req.body.userId && String(req.body.userId) !== String(req.user._id)) {
-      if (req.user.role !== 'admin' && req.user.role !== 'teacher') {
-        return res.status(403).json({ message: 'You can only create notifications for yourself.' });
-      }
-      if (!isObjectId(req.body.userId)) {
-        errors.userId = 'That recipient id is not valid.';
-      } else {
-        const exists = await User.exists({ _id: req.body.userId });
-        if (!exists) errors.userId = 'That recipient no longer has an account.';
-        else target = String(req.body.userId);
-      }
-    }
-
-    if (Object.keys(errors).length) {
-      return res.status(400).json({ message: V.firstError(errors) || 'Please correct the highlighted fields.', errors });
-    }
-
-    const notif = await Notification.create({
-      userId: target,
-      type: type.value,
-      title: title.value,
-      body: body.value || '',
-      read: false,
-    });
-    res.status(201).json(notif);
+    const title = clean(req.body.title, 120);
+    if (!title) return res.status(400).json({ message: 'A title is required.' });
+    const type = Notification.TYPES.includes(req.body.type) ? req.body.type : 'system';
+    const n = await Notification.create({ userId: owner(req), type, title, body: clean(req.body.body, 1000), read: false });
+    res.status(201).json({ _id: n._id, type: n.type, title: n.title, body: n.body, read: n.read, createdAt: n.createdAt });
   } catch (err) {
     console.error('POST /notifications failed:', err);
     res.status(500).json({ message: 'Failed to create the notification.' });
   }
 });
 
-// PATCH /api/notifications/read-all
-//
-// Declared BEFORE /:id/read on purpose. The two don't actually collide (one is
-// a single path segment, the other is two), but keeping the literal route above
-// the parameterised one is the habit that prevents the collision when someone
-// later adds PATCH /:id.
-router.patch('/read-all', async (req, res) => {
-  try {
-    const result = await Notification.updateMany(
-      { userId: req.user._id, read: false },
-      { read: true },
-    );
-    res.json({ message: 'All notifications marked read.', modified: result.modifiedCount || 0 });
-  } catch (err) {
-    console.error('PATCH /notifications/read-all failed:', err);
-    res.status(500).json({ message: 'Failed to mark notifications read.' });
-  }
-});
-
-// PATCH /api/notifications/:id/read
-router.patch('/:id/read', async (req, res) => {
-  try {
-    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Notification not found.' });
-    const notif = await Notification.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
-      { read: true },
-      { new: true },
-    );
-    if (!notif) return res.status(404).json({ message: 'Notification not found.' });
-    res.json(notif);
-  } catch (err) {
-    console.error('PATCH /notifications/:id/read failed:', err);
-    res.status(500).json({ message: 'Failed to update the notification.' });
-  }
-});
-
-// DELETE /api/notifications/:id
+// DELETE /api/notifications/:id and DELETE /api/notifications (clear all) - own only
 router.delete('/:id', async (req, res) => {
   try {
-    if (!isObjectId(req.params.id)) return res.status(404).json({ message: 'Notification not found.' });
-    const notif = await Notification.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
-    if (!notif) return res.status(404).json({ message: 'Notification not found.' });
-    res.json({ message: 'Notification removed.' });
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ message: 'Invalid notification id.' });
+    const r = await Notification.deleteOne({ _id: req.params.id, userId: owner(req) });
+    if (!r.deletedCount) return res.status(404).json({ message: 'Notification not found.' });
+    res.json({ message: 'Deleted.' });
   } catch (err) {
     console.error('DELETE /notifications/:id failed:', err);
-    res.status(500).json({ message: 'Failed to remove the notification.' });
+    res.status(500).json({ message: 'Failed to delete the notification.' });
   }
 });
 
-// DELETE /api/notifications - admin housekeeping: clear the caller's own list.
-router.delete('/', restrictTo('admin', 'teacher', 'student'), async (req, res) => {
+router.delete('/', async (req, res) => {
   try {
-    const result = await Notification.deleteMany({ userId: req.user._id });
-    res.json({ message: 'Notifications cleared.', removed: result.deletedCount || 0 });
+    const r = await Notification.deleteMany({ userId: owner(req) });
+    res.json({ deleted: r.deletedCount });
   } catch (err) {
     console.error('DELETE /notifications failed:', err);
     res.status(500).json({ message: 'Failed to clear notifications.' });

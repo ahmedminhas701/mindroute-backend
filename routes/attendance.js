@@ -1,3 +1,4 @@
+const { notifyStudents } = require('../utils/notify');
 const express = require('express');
 const router = express.Router();
 
@@ -95,6 +96,8 @@ router.post('/', restrictTo('admin', 'teacher'), async (req, res) => {
 
     const teacher = req.user.role === 'teacher' ? await Teacher.findOne({ email: req.user.email }) : null;
 
+    const before = await AttendanceRecord.findOne({ courseId: course.id, date: dateR.value }).lean();
+
     const record = await AttendanceRecord.findOneAndUpdate(
       { courseId: course.id, date: dateR.value },
       { courseId: course.id, subject: course.subject, date: dateR.value, teacherId: teacher ? teacher.id : null, entries },
@@ -102,6 +105,10 @@ router.post('/', restrictTo('admin', 'teacher'), async (req, res) => {
     );
 
     await recomputeStudentAttendance(entries.map(e => e.studentId));
+
+    const wasAbsent = new Set(((before && before.entries) || []).filter(e => !e.present).map(e => e.studentId));
+    const newlyAbsent = entries.filter(e => !e.present && !wasAbsent.has(e.studentId)).map(e => e.studentId);
+    await notifyStudents(newlyAbsent, { type: 'change', title: 'Marked absent', body: `You were marked absent for ${course.title} on ${dateR.value}.` });
 
     res.status(201).json({ message: 'Attendance saved.', record });
   } catch (err) {

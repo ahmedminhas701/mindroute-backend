@@ -834,14 +834,41 @@ function renderNotifBell() {
   }
 }
 
+let _notifTimer = null;
+
+/** Pulls the latest notifications and redraws the bell, the sidebar badge and the page list. */
+async function refreshNotifications() {
+  try {
+    const before = unreadCount();
+    const list = await apiFetch('/notifications');
+    NOTIFICATIONS.length = 0;                 // in place, so it works whether NOTIFICATIONS is let or const
+    NOTIFICATIONS.push(...list);
+    renderNotifBell();
+    if (typeof updateNavBadge === 'function') updateNavBadge();
+    if (typeof renderNotifPage === 'function' && document.getElementById('notif-page-list')) renderNotifPage();
+    const gained = unreadCount() - before;
+    if (gained > 0) showToast(gained === 1 ? 'You have a new notification.' : `You have ${gained} new notifications.`);
+  } catch (err) {
+    console.error('Could not refresh notifications:', err.message);
+  }
+}
+
+function startNotificationPolling() {
+  if (_notifTimer) return;
+  _notifTimer = setInterval(() => { if (!document.hidden) refreshNotifications(); }, 45000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshNotifications(); });
+}
+
 async function markAllRead() {
   try {
     await apiFetch('/notifications/read-all', { method: 'PATCH' });
-    NOTIFICATIONS.forEach(n => n.read = true);
-    renderNotifBell();
+    NOTIFICATIONS.forEach(n => { n.read = true; });
   } catch (err) {
     showToast(err.message);
   }
+  renderNotifBell();
+  if (typeof updateNavBadge === 'function') updateNavBadge();
+  if (typeof renderNotifPage === 'function' && document.getElementById('notif-page-list')) renderNotifPage();
 }
 
 // Global click handler: toggle the notif dropdown open/closed.

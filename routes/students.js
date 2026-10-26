@@ -306,10 +306,19 @@ router.put('/:id', restrictTo('admin'), async (req, res) => {
       }
     }
 
+    const before = { totalFee: existing.totalFee, paidAmount: existing.paidAmount, feeStatus: existing.feeStatus };
     const oldEmail = existing.email;
     Object.assign(existing, values);
     // .save() runs the full validator set; findOneAndUpdate does not.
     await existing.save();
+
+    const paidDelta = (existing.paidAmount || 0) - (before.paidAmount || 0);
+    if (paidDelta > 0) {
+      const remaining = Math.max(0, (existing.totalFee || 0) - (existing.paidAmount || 0));
+      await notifyStudents([existing.id], { type: 'fee', title: 'Payment recorded', body: `Rs. ${paidDelta.toLocaleString()} received. Remaining balance: Rs. ${remaining.toLocaleString()}.` });
+    } else if (existing.totalFee !== before.totalFee || existing.feeStatus !== before.feeStatus) {
+      await notifyStudents([existing.id], { type: 'fee', title: 'Fee details updated', body: 'Your fee record was updated. Open Fee Details to see the latest figures.' });
+    }
 
     // Keep the login account in step with the profile.
     if (values.email && values.email !== oldEmail) {
