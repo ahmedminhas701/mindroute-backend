@@ -184,27 +184,27 @@
       return;
     }
 
-    list.innerHTML = items.map(n => `
-      <div class="notif-page-item ${n.read ? '' : 'unread'}"
-        onclick="markOneRead('${n._id || n.id}')">
-        <div class="notif-type-dot"
-          style="background:${typeColors[n.type] || '#1B5FAD'}"></div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-            <span style="font-size:0.62rem;font-weight:600;text-transform:uppercase;
-                         letter-spacing:0.06em;font-family:var(--font-mono);
-                         color:${typeColors[n.type] || '#1B5FAD'}">
-              ${typeLabels[n.type] || n.type}
-            </span>
-            <span class="notif-page-time">${n.time || (n.createdAt ? timeAgo(n.createdAt) : '')}</span>
+    list.innerHTML = items.map(n => {
+      const targetUrl = typeof getNotificationTargetUrl === 'function' ? getNotificationTargetUrl(n) : 'dashboard.html';
+      return `
+        <a href="${targetUrl}" class="notif-page-item ${n.read ? '' : 'unread'}" style="text-decoration:none;color:inherit"
+           onclick="handleNotificationClick(event, '${n._id || n.id}', '${targetUrl}')">
+          <div class="notif-type-dot" style="background:${typeColors[n.type] || '#1B5FAD'}"></div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+              <span style="font-size:0.62rem;font-weight:600;text-transform:uppercase;
+                           letter-spacing:0.06em;font-family:var(--font-mono);
+                           color:${typeColors[n.type] || '#1B5FAD'}">
+                ${typeLabels[n.type] || n.type}
+              </span>
+              <span class="notif-page-time">${n.time || (n.createdAt ? timeAgo(n.createdAt) : '')}</span>
+            </div>
+            <div class="notif-page-title">${n.title}</div>
+            <div class="notif-page-body">${n.body}</div>
           </div>
-          <div class="notif-page-title">${n.title}</div>
-          <div class="notif-page-body">${n.body}</div>
-        </div>
-        ${!n.read
-          ? '<div class="notif-unread-dot"></div>'
-          : ''}
-      </div>`).join('');
+          ${!n.read ? '<div class="notif-unread-dot"></div>' : ''}
+        </a>`;
+    }).join('');
   }
 
   function filterNotifs(type, btn) {

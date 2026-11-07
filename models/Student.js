@@ -136,4 +136,7 @@ studentSchema.virtual('balance').get(function () {
 studentSchema.set('toJSON', { virtuals: true });
 studentSchema.set('toObject', { virtuals: true });
 
+studentSchema.index({ batch: 1 });
+studentSchema.index({ enrolledCourseIds: 1 });
+
 module.exports = mongoose.model('Student', studentSchema);

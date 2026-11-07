@@ -1,27 +1,16 @@
-// ── Dependency-free rate limiter ─────────────────────────────────────────
+// ── Dependency-free rate limiter with DoS & Memory Protection ───────────────
 //
-// Deliberately NOT express-rate-limit: this project has no npm access in the
-// build environment it was last worked on, and pulling a dependency for ~40
-// lines of logic isn't worth it. If you later add express-rate-limit, this
-// module can be swapped out without touching any route file.
-//
-// Fixed-window counter held in process memory. That means:
-//   - it resets when the server restarts (acceptable - a brute-force run that
-//     survives a restart is not the threat model here)
-//   - it does NOT work across multiple server instances. If you ever run more
-//     than one node process behind a load balancer, move this to Redis or the
-//     database, otherwise the effective limit is (limit x instances).
-//
-// Buckets are keyed by IP *and* by a caller-supplied key (for login we add the
-// submitted email). Keying on IP alone lets one attacker on a shared NAT lock
-// out everyone behind it; keying on email alone lets a distributed attacker
-// walk around the limit. Tracking both means either signal trips the brake.
+// Fixed-window counter held in process memory with LRU eviction and memory bounds.
+// Supports:
+//   - General route rate limiting
+//   - Login failure-only limiting with composite (IP + Email) keys to prevent
+//     Denial-of-Service / Account Lockout attacks.
+//   - Emergency account/IP unlocking
 
+const MAX_BUCKETS = 50000; // Hard memory cap to prevent memory exhaustion under high DoS traffic
 const buckets = new Map();
 
-// Housekeeping: without this, a long-running server accumulates one Map entry
-// per unique IP/email forever, which is a slow memory leak. unref() so this
-// timer never holds the process open.
+// Housekeeping: sweep expired buckets every 5 minutes
 const SWEEP_MS = 5 * 60 * 1000;
 const sweeper = setInterval(() => {
   const now = Date.now();
@@ -31,12 +20,31 @@ const sweeper = setInterval(() => {
 }, SWEEP_MS);
 if (typeof sweeper.unref === 'function') sweeper.unref();
 
+function setBucket(key, bucket) {
+  if (buckets.size >= MAX_BUCKETS) {
+    // Evict expired first
+    const now = Date.now();
+    for (const [k, b] of buckets) {
+      if (b.resetAt <= now) buckets.delete(k);
+    }
+    // If still over cap, delete the first 500 oldest entries
+    if (buckets.size >= MAX_BUCKETS) {
+      let count = 0;
+      for (const k of buckets.keys()) {
+        buckets.delete(k);
+        if (++count >= 500) break;
+      }
+    }
+  }
+  buckets.set(key, bucket);
+}
+
 function hit(key, limit, windowMs) {
   const now = Date.now();
   let bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
     bucket = { count: 0, resetAt: now + windowMs };
-    buckets.set(key, bucket);
+    setBucket(key, bucket);
   }
   bucket.count += 1;
   return {
@@ -46,19 +54,15 @@ function hit(key, limit, windowMs) {
 }
 
 /**
- * rateLimit({ windowMs, max, keyFn })
- *
- * keyFn(req) may return a string or an array of strings. Every returned key is
- * counted independently and the request is blocked if ANY of them is over the
- * limit.
+ * rateLimit({ windowMs, max, keyFn, message })
  */
-function rateLimit({ windowMs = 15 * 60 * 1000, max = 10, keyFn = null, message = 'Too many requests. Please try again later.' } = {}) {
+function rateLimit({ windowMs = 15 * 60 * 1000, max = 100, keyFn = null, message = 'Too many requests. Please try again later.' } = {}) {
   return function rateLimitMiddleware(req, res, next) {
-    const ip = req.ip || req.connection?.remoteAddress || 'unknown';
+    const ip = (req.headers && req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : '') || req.ip || req.connection?.remoteAddress || 'unknown';
     let keys = keyFn ? keyFn(req) : ip;
     if (!Array.isArray(keys)) keys = [keys];
-    keys = keys.filter(Boolean).map(k => `${req.baseUrl}${req.path}|${k}`);
-    if (!keys.length) keys = [`${req.baseUrl}${req.path}|${ip}`];
+    keys = keys.filter(Boolean).map(k => `${req.baseUrl || ''}${req.path || ''}|${k}`);
+    if (!keys.length) keys = [`${req.baseUrl || ''}${req.path || ''}|${ip}`];
 
     let worst = 0;
     let blocked = false;
@@ -76,10 +80,6 @@ function rateLimit({ windowMs = 15 * 60 * 1000, max = 10, keyFn = null, message 
   };
 }
 
-/**
- * Call after a *successful* login so a legitimate user who fat-fingered their
- * password a few times isn't still carrying those strikes.
- */
 function resetRateLimit(pathKey, ...identifiers) {
   identifiers.filter(Boolean).forEach(id => buckets.delete(`${pathKey}|${id}`));
 }
@@ -104,12 +104,40 @@ function secondsUntilAllowed(checks) {
 
 function recordFailure(key, windowMs) {
   let b = activeBucket(key);
-  if (!b) { b = { count: 0, resetAt: Date.now() + windowMs }; buckets.set(key, b); }
+  if (!b) {
+    b = { count: 0, resetAt: Date.now() + windowMs };
+    setBucket(key, b);
+  }
   b.count += 1;
 }
 
 function clearKey(key) { buckets.delete(key); }
 
-module.exports = { rateLimit, resetRateLimit, secondsUntilAllowed, recordFailure, clearKey };
+function unlockAccount(email) {
+  if (!email) return 0;
+  const needle = String(email).toLowerCase().trim();
+  let cleared = 0;
+  for (const k of buckets.keys()) {
+    if (k.includes(needle)) {
+      buckets.delete(k);
+      cleared++;
+    }
+  }
+  return cleared;
+}
 
+function clearAllBuckets() {
+  const count = buckets.size;
+  buckets.clear();
+  return count;
+}
 
+module.exports = {
+  rateLimit,
+  resetRateLimit,
+  secondsUntilAllowed,
+  recordFailure,
+  clearKey,
+  unlockAccount,
+  clearAllBuckets,
+};

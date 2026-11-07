@@ -48,8 +48,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Global process protections against unhandled errors causing unexpected server crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', err => {
+  console.error('Uncaught Exception:', err);
+});
+
 // Compression first - it has to wrap the handlers whose output it compresses.
 app.use(compression());
+
+// General API protection against volumetric denial of service
+const { rateLimit } = require('./middleware/rateLimit');
+app.use('/api', rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 600,
+  message: 'Too many requests to the API. Please wait a moment.',
+}));
 
 // CORS. Same-origin now that Express serves the pages, so this only matters for
 // a separately-hosted frontend. CORS_ORIGIN can be a comma-separated list; with
@@ -142,7 +158,7 @@ if (require.main === module) {
     process.exit(1);
   }
 
-  mongoose.connect(process.env.MONGO_URI)
+  mongoose.connect(process.env.MONGO_URI, { maxPoolSize: 50, serverSelectionTimeoutMS: 5000 })
     .then(() => {
       console.log('MongoDB connected.');
       app.listen(PORT, () => {

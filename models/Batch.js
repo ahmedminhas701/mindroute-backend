@@ -51,4 +51,6 @@ const batchSchema = new mongoose.Schema({
   subjectTeachers: { type: Map, of: String, default: {} },
 }, { timestamps: true });
 
+batchSchema.index({ studentIds: 1 });
+
 module.exports = mongoose.model('Batch', batchSchema);

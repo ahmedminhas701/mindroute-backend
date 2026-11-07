@@ -801,6 +801,55 @@ function timeAgo(dateStr) {
 // ──────────────────────────────────────────────────
 // 13. NOTIFICATION RENDERER (the bell icon dropdown in the topbar)
 // ──────────────────────────────────────────────────
+function getNotificationTargetUrl(n) {
+  const session = getSession();
+  const role = session ? session.role : 'student';
+  const type = (n && n.type) || 'system';
+  const title = (n && n.title) || '';
+  const body = (n && n.body) || '';
+  const text = (title + ' ' + body).toLowerCase();
+
+  if (role === 'student') {
+    if (type === 'fee' || text.includes('fee') || text.includes('payment') || text.includes('balance') || text.includes('due date')) return 'fees.html';
+    if (type === 'schedule' || type === 'live' || text.includes('class') || text.includes('schedule')) return 'schedule.html';
+    if (type === 'grade' || text.includes('grade') || text.includes('marks') || text.includes('score')) return 'performance.html';
+    if (text.includes('absent') || text.includes('attendance')) return 'attendance.html';
+    if (type === 'upload' || type === 'due' || type === 'assignment' || type === 'quiz' || text.includes('course') || text.includes('material') || text.includes('lecture') || text.includes('batch')) return 'courses.html';
+    return 'notifications.html';
+  } else if (role === 'teacher') {
+    if (type === 'schedule' || type === 'live' || text.includes('class') || text.includes('schedule')) return 'schedule.html';
+    if (type === 'assignment' || type === 'quiz' || type === 'grade' || text.includes('grading') || text.includes('submission')) return 'grading.html';
+    if (text.includes('student') || text.includes('absent') || text.includes('attendance')) return 'students.html';
+    if (type === 'upload' || type === 'change' || text.includes('course') || text.includes('subject') || text.includes('batch')) return 'courses.html';
+    return 'notifications.html';
+  } else if (role === 'admin') {
+    if (type === 'fee' || text.includes('fee') || text.includes('payment') || text.includes('student')) return 'students.html';
+    if (text.includes('teacher') || text.includes('assigned to teach') || text.includes('subject assigned')) return 'teachers.html';
+    if (text.includes('batch')) return 'batches.html';
+    if (text.includes('test') || text.includes('entry test')) return 'tests.html';
+    if (type === 'upload' || type === 'change' || text.includes('course')) return 'courses.html';
+    return 'notifications.html';
+  }
+  return 'notifications.html';
+}
+
+async function handleNotificationClick(event, id, targetUrl) {
+  if (event) event.preventDefault();
+  const n = NOTIFICATIONS.find(x => String(x._id || x.id) === String(id));
+  if (n && !n.read) {
+    n.read = true;
+    renderNotifBell();
+    if (typeof updateNavBadge === 'function') updateNavBadge();
+    if (typeof renderNotifPage === 'function' && document.getElementById('notif-page-list')) renderNotifPage();
+    apiFetch(`/notifications/${id}/read`, { method: 'PATCH' }).catch(() => {});
+  }
+  if (targetUrl) {
+    const cur = location.pathname.split('/').pop();
+    if (cur !== targetUrl) {
+      window.location.href = targetUrl;
+    }
+  }
+}
 function renderNotifBell() {
   const bell  = document.getElementById('notif-bell');
   const count = document.getElementById('notif-count');
@@ -814,20 +863,18 @@ function renderNotifBell() {
     list.innerHTML = '';
     if (!NOTIFICATIONS.length) { list.innerHTML = '<div class="notif-empty">No notifications</div>'; return; }
     NOTIFICATIONS.forEach(n => {
-      const item = document.createElement('div');
+      const targetUrl = getNotificationTargetUrl(n);
+      const item = document.createElement('a');
+      item.href = targetUrl;
       item.className = 'notif-item' + (n.read ? '' : ' unread');
+      item.style.textDecoration = 'none';
+      item.style.color = 'inherit';
       item.innerHTML = `
         <div class="notif-icon ${esc(notifColors[n.type] || 'si-blue')}" style="font-size:0.7rem;font-family:var(--font-mono)">${esc(String(n.type || '').slice(0, 2).toUpperCase())}</div>
         <div class="notif-body" style="flex:1"><p><strong>${esc(n.title)}</strong>${n.body ? ' - ' + esc(n.body) : ''}</p><small>${esc(timeAgo(n.createdAt))}</small></div>
         ${!n.read ? '<div class="notif-dot"></div>' : ''}`;
-      item.onclick = async () => {
-        try {
-          await apiFetch(`/notifications/${n._id}/read`, { method: 'PATCH' });
-          n.read = true;
-          renderNotifBell();
-        } catch (err) {
-          showToast(err.message);
-        }
+      item.onclick = async (e) => {
+        await handleNotificationClick(e, n._id, targetUrl);
       };
       list.appendChild(item);
     });

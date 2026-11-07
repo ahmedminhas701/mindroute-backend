@@ -75,4 +75,7 @@ const teacherSchema = new mongoose.Schema({
   joinDate:  { type: String, validate: dateValidator },
 }, { timestamps: true });
 
+teacherSchema.index({ courseIds: 1 });
+teacherSchema.index({ status: 1 });
+
 module.exports = mongoose.model('Teacher', teacherSchema);

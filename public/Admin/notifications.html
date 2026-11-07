@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <style>html,body{background:#f7f8fa!important}</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Notifications - Admin | Mind Route</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="../css/styles.css">
+  <style>
+    .notif-page-item {
+      display:flex;align-items:flex-start;gap:0.85rem;
+      padding:1rem 1.1rem;border-bottom:1px solid var(--border);
+      cursor:pointer;transition:background 0.1s;
+      text-decoration:none;color:inherit;
+    }
+    .notif-page-item:hover { background:var(--bg); }
+    .notif-page-item.unread { background:#F0F7FF; }
+    .notif-page-item:last-child { border-bottom:none; }
+
+    .notif-type-dot {
+      width:8px;height:8px;border-radius:50%;
+      flex-shrink:0;margin-top:5px;
+    }
+
+    .notif-page-title {
+      font-size:0.85rem;font-weight:600;
+      color:var(--text-dark);margin-bottom:2px;
+    }
+    .notif-page-body {
+      font-size:0.78rem;color:var(--text-mid);
+      line-height:1.5;margin-bottom:3px;
+    }
+    .notif-page-time {
+      font-size:0.7rem;color:var(--text-light);
+      font-family:var(--font-mono);
+    }
+    .notif-unread-dot {
+      width:7px;height:7px;border-radius:50%;
+      background:var(--blue);flex-shrink:0;margin-top:6px;margin-left:auto;
+    }
+
+    .notif-filter-btn {
+      padding:0.35rem 0.85rem;border-radius:20px;
+      font-size:0.75rem;font-weight:500;cursor:pointer;
+      border:1px solid var(--border);background:var(--white);
+      color:var(--text-mid);transition:all 0.1s;
+    }
+    .notif-filter-btn.active {
+      background:var(--navy);color:#fff;border-color:var(--navy);
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo">
+        <div class="logo-icon">MR</div>
+        <div>Mind Route<span class="logo-sub">Academy LMS</span></div>
+      </div>
+    </div>
+    <div class="sidebar-user">
+      <div class="user-avatar" id="sb-avatar">A</div>
+      <div class="user-info">
+        <div class="un" id="sb-name">Admin</div>
+        <div class="ur">Administrator</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a href="dashboard.html" class="nav-item"><span class="nav-icon">⊞</span>Dashboard</a>
+      <div class="nav-label">Management</div>
+      <a href="students.html" class="nav-item"><span class="nav-icon">◎</span>Students</a>
+      <a href="teachers.html" class="nav-item"><span class="nav-icon">◈</span>Teachers</a>
+      <a href="courses.html" class="nav-item"><span class="nav-icon">▤</span>Courses</a>
+      <a href="batches.html" class="nav-item"><span class="nav-icon">▦</span>Batches</a>
+      <a href="tests.html" class="nav-item"><span class="nav-icon">◫</span>Entry Tests</a>
+      <div class="nav-label">Account</div>
+      <a href="notifications.html" class="nav-item active">
+        <span class="nav-icon">◐</span>Notifications
+        <span class="nav-badge" id="notif-nav-badge" style="display:none">0</span>
+      </a>
+      <a href="../login.html" class="nav-item logout" id="logout-btn"><span class="nav-icon">&#x2192;</span>Sign Out</a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">Notifications</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost btn-sm" onclick="markAllReadAndRender()">
+          Mark all read
+        </button>
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header"><h4>Notifications</h4><button onclick="markAllRead()">Mark all read</button></div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page-content">
+      <div class="page-header">
+        <h1>Admin Notifications</h1>
+        <p>System alerts, batch registrations, course updates, and financial logs.</p>
+      </div>
+
+      <!-- Filter row -->
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center">
+        <button class="notif-filter-btn active" data-filter="all" onclick="filterNotifs('all',this)">All</button>
+        <button class="notif-filter-btn" data-filter="fee" onclick="filterNotifs('fee',this)">Fees</button>
+        <button class="notif-filter-btn" data-filter="change" onclick="filterNotifs('change',this)">Changes</button>
+        <button class="notif-filter-btn" data-filter="upload" onclick="filterNotifs('upload',this)">Curriculum</button>
+        <button class="notif-filter-btn" data-filter="system" onclick="filterNotifs('system',this)">System</button>
+        <button class="notif-filter-btn" data-filter="unread" onclick="filterNotifs('unread',this)">Unread</button>
+        <span id="notif-page-count" style="margin-left:auto;font-size:0.75rem;color:var(--text-light);font-family:var(--font-mono)"></span>
+      </div>
+
+      <!-- Notifications list -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <div id="notif-page-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/validation.js"></script>
+<script src="../js/app.js"></script>
+<script>
+  const typeColors = {
+    upload:   '#1B5FAD',
+    due:      '#C47C08',
+    live:     '#0E8A5F',
+    change:   '#0F1E3C',
+    overdue:  '#DC2626',
+    schedule: '#0E8A5F',
+    quiz:     '#C47C08',
+    fee:      '#0E8A5F',
+    system:   '#1B5FAD',
+  };
+
+  const typeLabels = {
+    upload:   'Curriculum',
+    due:      'Deadline',
+    live:     'Class',
+    change:   'Update',
+    overdue:  'Overdue',
+    schedule: 'Schedule',
+    quiz:     'Quiz',
+    fee:      'Fee',
+    system:   'System',
+  };
+
+  let _currentFilter = 'all';
+
+  function renderNotifPage() {
+    const list    = document.getElementById('notif-page-list');
+    const countEl = document.getElementById('notif-page-count');
+    if (!list) return;
+
+    let items = [...NOTIFICATIONS];
+    if (_currentFilter === 'unread') {
+      items = items.filter(n => !n.read);
+    } else if (_currentFilter !== 'all') {
+      items = items.filter(n => n.type === _currentFilter);
+    }
+
+    if (countEl) {
+      const unread = NOTIFICATIONS.filter(n => !n.read).length;
+      countEl.textContent = items.length + ' notification' + (items.length !== 1 ? 's' : '')
+        + (unread > 0 ? ' · ' + unread + ' unread' : '');
+    }
+
+    if (!items.length) {
+      list.innerHTML = `
+        <div style="padding:3rem;text-align:center;color:var(--text-light);font-size:0.85rem">
+          No notifications here.
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = items.map(n => {
+      const targetUrl = typeof getNotificationTargetUrl === 'function' ? getNotificationTargetUrl(n) : 'dashboard.html';
+      return `
+        <a href="${targetUrl}" class="notif-page-item ${n.read ? '' : 'unread'}"
+           onclick="handleNotificationClick(event, '${n._id || n.id}', '${targetUrl}')">
+          <div class="notif-type-dot" style="background:${typeColors[n.type] || '#1B5FAD'}"></div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+              <span style="font-size:0.62rem;font-weight:600;text-transform:uppercase;
+                           letter-spacing:0.06em;font-family:var(--font-mono);
+                           color:${typeColors[n.type] || '#1B5FAD'}">
+                ${typeLabels[n.type] || n.type}
+              </span>
+              <span class="notif-page-time">${n.time || (n.createdAt ? timeAgo(n.createdAt) : '')}</span>
+            </div>
+            <div class="notif-page-title">${n.title}</div>
+            <div class="notif-page-body">${n.body}</div>
+          </div>
+          ${!n.read ? '<div class="notif-unread-dot"></div>' : ''}
+        </a>`;
+    }).join('');
+  }
+
+  function filterNotifs(type, btn) {
+    _currentFilter = type;
+    document.querySelectorAll('.notif-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderNotifPage();
+  }
+
+  async function markAllReadAndRender() {
+    await markAllRead();
+  }
+
+  document.addEventListener('DOMContentLoaded', renderNotifPage);
+</script>
+</body>
+</html>

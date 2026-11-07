@@ -29,5 +29,6 @@ const courseSchema = new mongoose.Schema({
 // getting two separate Biology courses that would silently split students
 // and content between them.
 courseSchema.index({ batchId: 1, subject: 1 }, { unique: true });
+courseSchema.index({ teacher: 1 });
 
 module.exports = mongoose.model('Course', courseSchema);
