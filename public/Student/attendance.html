@@ -7,10 +7,8 @@
   <title>Attendance - Mind Route</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
-  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../css/styles.css">
-
 </head>
 <body>
 <div class="shell">
@@ -38,41 +36,99 @@
       <a href="performance.html" class="nav-item"><span class="nav-icon">◈</span> Performance</a>
       <a href="fees.html"        class="nav-item"><span class="nav-icon">◉</span> Fee Details</a>
       <div class="nav-label">Account</div>
-      <div class="notif-bell-wrap">
-        <a href="notifications.html" class="nav-item">
-          <span class="nav-icon">◐</span> Notifications
-          <span class="nav-badge" id="notif-nav-badge" style="display:none">0</span>
-        </a>
-        <div class="notif-dropdown" id="notif-dropdown">
-          <div class="notif-header">
-            <h4>Notifications</h4>
-            <button onclick="markAllRead()">Mark all read</button>
-          </div>
-          <div class="notif-list" id="notif-list"></div>
-        </div>
-      </div>
+      <a href="notifications.html" class="nav-item">
+        <span class="nav-icon">◐</span> Notifications
+        <span class="nav-badge" id="notif-nav-badge" style="display:none">0</span>
+      </a>
+      <a href="#" id="change-pw-link" class="nav-item" onclick="openChangePasswordModal();return false;"><span class="nav-icon">&#9672;</span> Change Password</a>
       <a href="#" id="logout-btn" class="nav-item logout"><span class="nav-icon">→</span> Sign Out</a>
     </nav>
   </aside>
 
   <div class="main">
     <div class="topbar">
-      <div class="topbar-left"><div class="topbar-title">Attendance</div></div>
+      <div class="topbar-left"><div class="topbar-title">Attendance Portal</div></div>
       <div class="topbar-right">
         Overall: <strong id="att-overall"
           style="margin-left:6px;color:var(--navy);font-family:var(--font-mono)">-</strong>
+        <div class="notif-bell-wrap" id="notif-bell-wrap">
+          <div class="notif-bell" id="notif-bell">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <div class="notif-count" id="notif-count" style="display:none">0</div>
+          </div>
+          <div class="notif-dropdown" id="notif-dropdown">
+            <div class="notif-header">
+              <h4>Notifications</h4>
+              <button onclick="markAllRead()">Mark all read</button>
+            </div>
+            <div class="notif-list" id="notif-list"></div>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="page-content">
       <div class="page-header">
-        <h1>Attendance Record</h1>
-        <p>Attendance is marked automatically when you complete both the quiz and assignment for a topic. Minimum 75% required per subject.</p>
+        <h1>Course Attendance Log</h1>
+        <p>Institutional attendance tracker following the FAST-NUCES Flex system. Minimum 75% attendance is required to appear in final assessments.</p>
       </div>
 
-      <!-- Subject attendance -->
+      <!-- FAST-NUCES Flex Portal View -->
+      <div class="card flex-attendance-card" id="student-att-view" style="margin-bottom:1.5rem;padding:1.4rem">
+        <!-- Registered Courses Bar -->
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding-bottom:1rem;margin-bottom:1.25rem;border-bottom:1px solid var(--border)">
+          <div style="font-weight:700;font-size:0.92rem;color:var(--text-dark);letter-spacing:0.02em">Registered Courses</div>
+          <div id="student-att-course-tabs" style="display:flex;gap:0.45rem;flex-wrap:wrap;align-items:center">
+            <!-- Course tabs loaded dynamically -->
+          </div>
+        </div>
+
+        <!-- Course Header & Percentage Progress -->
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem">
+          <div>
+            <div id="student-att-course-title" style="font-size:1.05rem;font-weight:700;color:var(--text-dark)">-</div>
+            <div id="student-att-course-subtitle" style="font-size:0.78rem;color:var(--text-mid);margin-top:2px">Institutional lecture-by-lecture audit log</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.85rem;flex-wrap:wrap">
+            <span style="font-size:0.82rem;color:var(--text-mid);font-weight:500">Attendance Percentage:</span>
+            <div style="width:200px;height:24px;background:#e2e8f0;border-radius:12px;overflow:hidden;position:relative;display:flex;align-items:center;box-shadow:inset 0 1px 2px rgba(0,0,0,0.1)">
+              <div id="student-att-progress-bar" style="height:100%;background:linear-gradient(90deg, #10b981, #059669);border-radius:12px;width:0%;transition:width 0.4s ease"></div>
+              <span id="student-att-pct-label" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:#ffffff;font-family:var(--font-mono);text-shadow:0 1px 2px rgba(0,0,0,0.5)">0.00%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Sub-bar -->
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;padding-top:0.75rem;border-top:1px solid var(--border)">
+          <div id="student-att-absent-hours" style="font-size:0.82rem;font-weight:600;color:var(--text-mid);font-family:var(--font-mono)">
+            Absent Hours: 0 / 0h
+          </div>
+          <button id="student-att-filter-absent-btn" class="btn btn-outline btn-sm" onclick="toggleStudentAbsentFilter()">
+            Show Absents Only
+          </button>
+        </div>
+
+        <!-- Lectures Table -->
+        <div class="table-wrap" style="overflow-x:auto">
+          <table class="att-sheet-table" style="width:100%;border-collapse:collapse;font-size:0.82rem">
+            <thead>
+              <tr style="background:var(--bg);border-bottom:1px solid var(--border)">
+                <th style="padding:0.7rem 1rem;text-align:center;width:95px;border-right:1px solid var(--border)">Lecture No</th>
+                <th style="padding:0.7rem 1rem;text-align:left;border-right:1px solid var(--border)">Date</th>
+                <th style="padding:0.7rem 1rem;text-align:center;width:170px;border-right:1px solid var(--border)">Duration (In Hours)</th>
+                <th style="padding:0.7rem 1rem;text-align:center;width:110px">Presence</th>
+              </tr>
+            </thead>
+            <tbody id="student-att-lecture-tbody">
+              <tr><td colspan="4" style="text-align:center;padding:2.5rem;color:var(--text-light)">Loading course attendance...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Subject-wise Attendance Summary -->
       <div class="card" style="margin-bottom:1.25rem">
-        <div class="card-title">Subject-wise Attendance</div>
+        <div class="card-title">All Registered Subjects Summary</div>
         <div class="table-wrap">
           <table>
             <thead>
@@ -112,11 +168,11 @@
 
       <!-- Legend -->
       <div class="card" style="margin-top:1.25rem">
-        <div class="card-title">Legend</div>
+        <div class="card-title">Standing Criteria</div>
         <div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:.85rem">
-          <span><strong style="color:var(--success)">Good</strong> - 85% and above</span>
+          <span><strong style="color:var(--success)">Good / Eligible</strong> - 85% and above</span>
           <span><strong style="color:var(--warning)">Low</strong> - 75% to 84%</span>
-          <span><strong style="color:var(--danger)">Critical</strong> - Below 75%</span>
+          <span><strong style="color:var(--danger)">Critical / Shortage</strong> - Below 75% (Cannot appear in exams)</span>
         </div>
       </div>
     </div>

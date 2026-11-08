@@ -1,3 +1,31 @@
+
+/** Checks whether an online class is currently active (from 20 mins before start until end). */
+function isClassTimeActive(classDay, classTime, durationMin = 90) {
+  if (!classDay || !classTime) return { active: false, label: '' };
+  const now = new Date();
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const todayName = dayNames[now.getDay()];
+  if (todayName.toLowerCase() !== String(classDay).toLowerCase()) {
+    return { active: false, label: 'Scheduled for ' + classDay };
+  }
+
+  const parts = String(classTime).split(':');
+  if (parts.length < 2) return { active: false, label: '' };
+  const classHour = parseInt(parts[0], 10);
+  const classMin = parseInt(parts[1], 10);
+  const classTotalMinutes = classHour * 60 + classMin;
+
+  const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+  const startWindow = classTotalMinutes - 20; // active 20 mins before
+  const endWindow = classTotalMinutes + Number(durationMin || 90);
+
+  const isActive = currentTotalMinutes >= startWindow && currentTotalMinutes <= endWindow;
+  return {
+    active: isActive,
+    label: isActive ? 'Live Now' : 'Starts at ' + classTime,
+  };
+}
+
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  MIND ROUTE LMS - app.js                                     ║
 // ║  Single source of truth for all mock data + page logic.      ║
@@ -240,6 +268,17 @@ function fmtDate(v) {
   const s = String(v);
   const d = /^\d{4}-\d{2}-\d{2}/.test(s) ? new Date(s.slice(0, 10) + 'T00:00:00') : new Date(s);
   return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fmtDateShort(v) {
+  if (!v) return '-';
+  const s = String(v);
+  const d = /^\d{4}-\d{2}-\d{2}/.test(s) ? new Date(s.slice(0, 10) + 'T00:00:00') : new Date(s);
+  if (isNaN(d.getTime())) return s;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleDateString('en-GB', { month: 'short' });
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
 }
 
 /** One fee-status colour mapping for every page. */
@@ -1236,6 +1275,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (document.getElementById('students-tbody'))        renderTeacherStudents();
   if (document.getElementById('grading-container'))     initGrading();
   if (document.getElementById('teacher-schedule-grid')) renderTeacherSchedule();
+  if (document.getElementById('teacher-att-course-select')) renderTeacherAttendancePage();
+  if (document.getElementById('student-att-view') || document.getElementById('attendance-tbody')) renderStudentAttendancePage();
 
   // Admin pages - real multi-page files, same pattern as Student/Teacher above
   if (document.getElementById('admin-students-tbody'))  renderAdminStudents();
@@ -1369,12 +1410,17 @@ function renderDayClasses(containerId, dayName, label) {
   if (!el) return;
   const classes = TEACHER_SCHEDULE.filter(r => r.day === dayName).sort((a, b) => String(a.time).localeCompare(String(b.time)));
   if (!classes.length) { el.innerHTML = `<p style="color:var(--text-light);font-size:0.8rem">No classes ${esc(label)}.</p>`; return; }
-  el.innerHTML = classes.map(r => `<div class="day-class">
+  el.innerHTML = classes.map(r => {
+    const meetUrl = (r.link || (r.room && /^https?:\/\//i.test(r.room) ? r.room : '')).trim();
+    return `<div class="day-class" style="${meetUrl ? 'cursor:pointer;' : ''}" ${meetUrl ? `onclick="window.open('${escAttr(meetUrl)}','_blank','noopener,noreferrer')"` : ''}>
       <div class="class-time">${esc(r.time)}</div>
-      <div class="class-info">
+      <div class="class-info" style="flex:1">
         <h4>${esc(r.subject)} <span class="badge ${r.type === 'physical' ? 'badge-green' : 'badge-blue'}">${r.type === 'physical' ? 'Physical' : 'Online'}</span></h4>
-        <p>${esc(r.room || (r.type === 'online' ? 'Online' : 'TBA'))} · ${esc(r.duration || 60)} min</p>
-      </div></div>`).join('');
+        <p>${esc(r.room || (r.type === 'online' ? 'Online Class' : 'TBA'))} &bull; ${esc(r.duration || 60)} min</p>
+      </div>
+      ${meetUrl ? `<a href="${escAttr(meetUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" onclick="event.stopPropagation()" style="font-size:0.75rem;padding:0.25rem 0.6rem">Join Class &rarr;</a>` : ''}
+    </div>`;
+  }).join('');
 }
 
 /** Renders the "My Courses" grid page (one card per enrolled course). */
@@ -1957,9 +2003,17 @@ function renderSchedule() {
   container.innerHTML = days.map(day => {
     const classes = TEACHER_SCHEDULE.filter(r => r.day === day).sort((a, b) => String(a.time).localeCompare(String(b.time)));
     if (!classes.length) return '';
-    const rows = classes.map(r => `<div class="day-class"><div class="class-time">${esc(r.time)}</div><div class="class-info">
-        <h4>${esc(r.subject)} <span class="badge ${r.type === 'physical' ? 'badge-green' : 'badge-blue'}">${r.type === 'physical' ? 'Physical' : 'Online'}</span></h4>
-        <p>${esc(r.room || 'TBA')}</p></div></div>`).join('');
+    const rows = classes.map(r => {
+      const meetUrl = (r.link || (r.room && /^https?:\/\//i.test(r.room) ? r.room : '')).trim();
+      return `<div class="day-class" style="${meetUrl ? 'cursor:pointer;' : ''}" ${meetUrl ? `onclick="window.open('${escAttr(meetUrl)}','_blank','noopener,noreferrer')"` : ''}>
+        <div class="class-time">${esc(r.time)}</div>
+        <div class="class-info" style="flex:1">
+          <h4>${esc(r.subject)} <span class="badge ${r.type === 'physical' ? 'badge-green' : 'badge-blue'}">${r.type === 'physical' ? 'Physical' : 'Online'}</span></h4>
+          <p>${esc(r.room || (r.type === 'online' ? 'Online Class' : 'TBA'))}</p>
+        </div>
+        ${meetUrl ? `<a href="${escAttr(meetUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" onclick="event.stopPropagation()" style="font-size:0.75rem;padding:0.25rem 0.65rem">Join Online &rarr;</a>` : ''}
+      </div>`;
+    }).join('');
     return `<div class="day-card"><div class="day-card-head ${day === today ? 'today' : ''}">${day}${day === today ? ' - Today' : ''}</div>${rows}</div>`;
   }).join('');
 }
@@ -2697,9 +2751,10 @@ function openQuizEditor(cid, wi, ti, ci) {
   if (!modal) {
     modal = document.createElement('div');
     modal.id = 'quiz-editor-modal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:400;backdrop-filter:blur(2px)';
     document.body.appendChild(modal);
   }
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(2px);padding:1rem';
+  modal.style.display = 'flex';
 
   const renderQs = () => questions.map((q, qi) => `
     <div style="border:1px solid var(--border);border-radius:var(--radius);
@@ -3586,7 +3641,7 @@ async function submitAddClass() {
   // `c ? c.subject : course` - and that fallback wrote the COURSE TITLE into the
   // subject field whenever the title lookup missed, producing schedule rows whose
   // "subject" matched nothing in the Subject collection.
-  const payload = { courseId: Number(courseId), day, time, type, room, duration: Number(duration) };
+  const payload = { courseId: Number(courseId), day, time, type, room, link, duration: Number(duration) };
   const course  = COURSES[Number(courseId)];
 
   try {
@@ -6180,4 +6235,1725 @@ async function submitAssignment(topicId, topicSafe) {
   } catch (err) {
     if (statusEl) { statusEl.textContent = err.message; statusEl.style.color = 'var(--danger)'; }
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 24. PERSISTENT DASHBOARD SHELL ROUTER (SPA Navigation)
+// ══════════════════════════════════════════════════════════════
+const _pageHtmlCache = new Map();
+
+function installShellRouter() {
+  if (window._shellRouterInstalled) return;
+  window._shellRouterInstalled = true;
+
+  document.addEventListener('click', async (e) => {
+    const link = e.target.closest('a');
+    if (!link) return;
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('http')) return;
+    if (link.id === 'logout-btn' || link.classList.contains('logout')) return;
+    if (link.target === '_blank') return;
+
+    // Check same-panel directory navigation (e.g. students.html from dashboard.html)
+    const targetUrl = new URL(href, location.href);
+    if (targetUrl.origin !== location.origin) return;
+
+    const curDir = location.pathname.substring(0, location.pathname.lastIndexOf('/'));
+    const targetDir = targetUrl.pathname.substring(0, targetUrl.pathname.lastIndexOf('/'));
+    if (curDir !== targetDir) return; // Cross-panel or login navigation does regular browser reload
+
+    e.preventDefault();
+    if (location.pathname === targetUrl.pathname && location.search === targetUrl.search) return;
+
+    await navigateToShellPage(targetUrl.href, true);
+  });
+
+  window.addEventListener('popstate', async () => {
+    await navigateToShellPage(location.href, false);
+  });
+}
+
+async function navigateToShellPage(url, pushState = true) {
+  try {
+    let html = _pageHtmlCache.get(url);
+    if (!html) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Page could not be loaded.');
+      html = await resp.text();
+      _pageHtmlCache.set(url, html);
+    }
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    // 1. Swap page content in place
+    const newContent = doc.querySelector('.page-content');
+    const curContent = document.querySelector('.page-content');
+    if (newContent && curContent) {
+      curContent.innerHTML = newContent.innerHTML;
+      curContent.className = newContent.className;
+    }
+
+    // 2. Transfer page-specific modals into the shell
+    doc.querySelectorAll('.modal-box, .modal-backdrop, [id$="-modal"]').forEach(m => {
+      const existing = document.getElementById(m.id);
+      if (existing) {
+        existing.parentNode.replaceChild(m, existing);
+      } else {
+        document.body.appendChild(m);
+      }
+    });
+
+    // 3. Update document title and topbar title
+    document.title = doc.title;
+    const newTopTitle = doc.querySelector('.topbar-title');
+    const curTopTitle = document.querySelector('.topbar-title');
+    if (newTopTitle && curTopTitle) curTopTitle.innerHTML = newTopTitle.innerHTML;
+
+    // 4. Update browser URL history
+    if (pushState) {
+      history.pushState(null, '', url);
+    }
+
+    // 5. Update active sidebar item
+    const filename = url.split('/').pop().split('?')[0] || 'dashboard.html';
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+      const itemHref = (item.getAttribute('href') || '').split('/').pop().split('?')[0];
+      if (itemHref && itemHref === filename) {
+        item.classList.add('active');
+      } else if (itemHref) {
+        item.classList.remove('active');
+      }
+    });
+
+    // 6. Run page initializers for the new active view
+    runPageInitializers();
+    window.scrollTo(0, 0);
+  } catch (err) {
+    console.warn('In-shell navigation failed, falling back to full navigation:', err.message);
+    window.location.href = url;
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 25. TEACHER ATTENDANCE MATRIX SHEET
+// ══════════════════════════════════════════════════════════════
+let _currentAttendanceCourseId = null;
+let _currentAttendanceSheetData = null;
+
+async function openAttendanceModal(courseId) {
+  _currentAttendanceCourseId = Number(courseId);
+  const course = COURSES[_currentAttendanceCourseId];
+  if (!course) { showToast('That course no longer exists - reload the page.'); return; }
+
+  let m = document.getElementById('attendance-sheet-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'attendance-sheet-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:450;backdrop-filter:blur(2px);padding:1rem';
+    document.body.appendChild(m);
+  }
+
+  m.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:980px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg);overflow:hidden">
+      <div style="padding:1.1rem 1.4rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem">
+        <div>
+          <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.07em">Attendance Sheet</div>
+          <div style="font-weight:600;font-size:1.05rem;color:var(--text-dark)">${esc(course.title)}</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+          <input type="date" id="att-filter-start" class="form-control" style="font-size:0.76rem;padding:0.25rem 0.5rem;width:125px" title="Filter from date">
+          <span style="font-size:0.75rem;color:var(--text-light)">to</span>
+          <input type="date" id="att-filter-end" class="form-control" style="font-size:0.76rem;padding:0.25rem 0.5rem;width:125px" title="Filter to date">
+          <button class="btn btn-outline btn-sm" onclick="reloadAttendanceSheet()">Filter</button>
+          <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+          <input type="date" id="att-new-date" class="form-control" style="font-size:0.76rem;padding:0.25rem 0.5rem;width:125px" value="${todayISO()}">
+          <button class="btn btn-navy btn-sm" onclick="addDateToAttendanceSheet()">+ Add Date</button>
+        </div>
+      </div>
+      <div style="padding:1rem 1.4rem;overflow-y:auto;flex:1" id="att-sheet-container">
+        <div style="text-align:center;padding:2rem;color:var(--text-light)">Loading attendance sheet...</div>
+      </div>
+      <div style="padding:0.9rem 1.4rem;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg);flex-wrap:wrap;gap:0.5rem">
+        <div style="font-size:0.75rem;color:var(--text-mid)">
+          Click cell to cycle: <span class="att-cell-btn present" style="display:inline-flex;width:22px;height:20px;font-size:0.68rem">P</span> Present &bull;
+          <span class="att-cell-btn late" style="display:inline-flex;width:22px;height:20px;font-size:0.68rem">L</span> Late &bull;
+          <span class="att-cell-btn absent" style="display:inline-flex;width:22px;height:20px;font-size:0.68rem">A</span> Absent
+        </div>
+        <div style="display:flex;gap:0.65rem">
+          <button class="btn btn-ghost btn-sm" onclick="closeAttendanceModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="att-save-btn" onclick="saveAttendanceSheet()">Save Attendance</button>
+        </div>
+      </div>
+    </div>`;
+
+  m.style.display = 'flex';
+  await reloadAttendanceSheet();
+}
+
+function closeAttendanceModal() {
+  const m = document.getElementById('attendance-sheet-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function reloadAttendanceSheet() {
+  const container = document.getElementById('att-sheet-container');
+  if (!container || !_currentAttendanceCourseId) return;
+
+  const start = (document.getElementById('att-filter-start')?.value || '').trim();
+  const end   = (document.getElementById('att-filter-end')?.value || '').trim();
+  let query = '';
+  if (start) query += (query ? '&' : '?') + 'startDate=' + encodeURIComponent(start);
+  if (end)   query += (query ? '&' : '?') + 'endDate=' + encodeURIComponent(end);
+
+  try {
+    const data = await apiFetch('/attendance/sheet/' + _currentAttendanceCourseId + query);
+    _currentAttendanceSheetData = data;
+    renderAttendanceSheetTable(data);
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+function renderAttendanceSheetTable(data) {
+  const container = document.getElementById('att-sheet-container');
+  if (!container) return;
+
+  if (!data.students || !data.students.length) {
+    container.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-light)">No students are enrolled in this course yet.</div>';
+    return;
+  }
+
+  const dates = data.dates || [];
+
+  let theadCols = '<th>Student</th>';
+  dates.forEach(d => {
+    theadCols += `<th title="${d}">${d.slice(5)}</th>`;
+  });
+  theadCols += '<th style="text-align:center">Att %</th>';
+
+  let tbodyRows = '';
+  data.students.forEach(s => {
+    let cells = `<td>
+      <div style="font-weight:600;font-size:0.84rem;color:var(--text-dark)">${esc(s.name)}</div>
+      <div style="font-size:0.7rem;font-family:var(--font-mono);color:var(--text-light)">${esc(s.rollNo)}</div>
+    </td>`;
+
+    dates.forEach(d => {
+      const status = data.matrix[s.id]?.[d] || 'present';
+      const label = status === 'present' ? 'P' : status === 'late' ? 'L' : 'A';
+      cells += `<td>
+        <button class="att-cell-btn ${status}"
+          data-sid="${escAttr(s.id)}" data-date="${escAttr(d)}"
+          onclick="cycleAttendanceCell(this)">${label}</button>
+      </td>`;
+    });
+
+    const sum = data.summary[s.id] || { pct: 0 };
+    const pctColor = sum.pct >= 85 ? 'var(--success)' : sum.pct >= 75 ? 'var(--warning)' : 'var(--danger)';
+    cells += `<td style="text-align:center;font-family:var(--font-mono);font-weight:700;color:${pctColor}" id="att-pct-${s.id}">
+      ${sum.pct}%
+    </td>`;
+
+    tbodyRows += `<tr>${cells}</tr>`;
+  });
+
+  container.innerHTML = `
+    <div class="att-sheet-wrap">
+      <table class="att-sheet-table">
+        <thead><tr>${theadCols}</tr></thead>
+        <tbody>${tbodyRows}</tbody>
+      </table>
+    </div>`;
+}
+
+function cycleAttendanceCell(btn) {
+  const sid  = btn.dataset.sid;
+  const date = btn.dataset.date;
+  const cur  = _currentAttendanceSheetData.matrix[sid]?.[date] || 'present';
+  const next = cur === 'present' ? 'late' : cur === 'late' ? 'absent' : 'present';
+
+  if (!_currentAttendanceSheetData.matrix[sid]) _currentAttendanceSheetData.matrix[sid] = {};
+  _currentAttendanceSheetData.matrix[sid][date] = next;
+
+  btn.className = 'att-cell-btn ' + next;
+  btn.textContent = next === 'present' ? 'P' : next === 'late' ? 'L' : 'A';
+
+  // Recalculate row percentage live
+  const dates = _currentAttendanceSheetData.dates || [];
+  let attended = 0;
+  dates.forEach(d => {
+    const st = _currentAttendanceSheetData.matrix[sid]?.[d] || 'present';
+    if (st === 'present' || st === 'late') attended++;
+  });
+  const pct = dates.length ? Math.round((attended / dates.length) * 100) : 0;
+  _currentAttendanceSheetData.summary[sid].pct = pct;
+
+  const pctCell = document.getElementById('att-pct-' + sid);
+  if (pctCell) {
+    pctCell.textContent = pct + '%';
+    pctCell.style.color = pct >= 85 ? 'var(--success)' : pct >= 75 ? 'var(--warning)' : 'var(--danger)';
+  }
+}
+
+function addDateToAttendanceSheet() {
+  const dateInput = document.getElementById('att-new-date');
+  const newDate = (dateInput ? dateInput.value : '').trim();
+  if (!newDate) { showToast('Pick a valid date.'); return; }
+
+  if (!_currentAttendanceSheetData) return;
+  if (!_currentAttendanceSheetData.dates.includes(newDate)) {
+    _currentAttendanceSheetData.dates.push(newDate);
+    _currentAttendanceSheetData.dates.sort();
+
+    _currentAttendanceSheetData.students.forEach(s => {
+      if (!_currentAttendanceSheetData.matrix[s.id]) _currentAttendanceSheetData.matrix[s.id] = {};
+      _currentAttendanceSheetData.matrix[s.id][newDate] = 'present';
+    });
+    renderAttendanceSheetTable(_currentAttendanceSheetData);
+    showToast('Added ' + newDate + ' to attendance sheet.');
+  } else {
+    showToast('That date is already in the sheet.');
+  }
+}
+
+async function saveAttendanceSheet() {
+  const saveBtn = document.getElementById('att-save-btn');
+  if (!_currentAttendanceSheetData || !_currentAttendanceCourseId) return;
+
+  const dates = _currentAttendanceSheetData.dates || [];
+  if (!dates.length) { showToast('No dates to save.'); return; }
+
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  try {
+    for (const d of dates) {
+      const entries = _currentAttendanceSheetData.students.map(s => ({
+        studentId: s.id,
+        status: _currentAttendanceSheetData.matrix[s.id]?.[d] || 'present',
+      }));
+      await apiFetchDetailed('/attendance', {
+        method: 'POST',
+        body: JSON.stringify({
+          courseId: _currentAttendanceCourseId,
+          date: d,
+          entries,
+        }),
+      });
+    }
+
+    STUDENTS_DB = await apiFetch('/students');
+    closeAttendanceModal();
+    showToast('Attendance sheet saved successfully.');
+  } catch (err) {
+    showToast(err.message || 'Failed to save attendance.');
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Attendance'; }
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 26. TEACHER QUIZ MANAGER & BUILDER
+// ══════════════════════════════════════════════════════════════
+let _quizManagerCourseId = null;
+let _editingQuiz = null;
+
+async function openQuizManager(courseId) {
+  _quizManagerCourseId = Number(courseId);
+  const course = COURSES[_quizManagerCourseId];
+  if (!course) { showToast('Course not found.'); return; }
+
+  let m = document.getElementById('quiz-manager-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'quiz-manager-modal';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;z-index:460;backdrop-filter:blur(2px);padding:1rem';
+    document.body.appendChild(m);
+  }
+
+  m.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:780px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg);overflow:hidden">
+      <div style="padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.07em">Quiz Management</div>
+          <h3 style="font-size:1.05rem;color:var(--text-dark)">${esc(course.title)}</h3>
+        </div>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-primary btn-sm" onclick="openQuizEditorModal(${_quizManagerCourseId})">+ Create New Quiz</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeQuizManagerModal()">Close</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem 1.5rem;overflow-y:auto;flex:1" id="quiz-manager-list">
+        <div style="text-align:center;padding:2rem;color:var(--text-light)">Loading quizzes...</div>
+      </div>
+    </div>`;
+
+  m.style.display = 'flex';
+  await reloadQuizManagerList();
+}
+
+function closeQuizManagerModal() {
+  const m = document.getElementById('quiz-manager-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function reloadQuizManagerList() {
+  const box = document.getElementById('quiz-manager-list');
+  if (!box || !_quizManagerCourseId) return;
+
+  try {
+    const list = await apiFetch('/quizzes?courseId=' + _quizManagerCourseId);
+    if (!list.length) {
+      box.innerHTML = `
+        <div style="text-align:center;padding:3rem 1rem">
+          <div style="font-size:0.9rem;font-weight:600;color:var(--text-dark);margin-bottom:0.25rem">No quizzes created yet</div>
+          <p style="font-size:0.8rem;color:var(--text-mid);margin-bottom:1rem">Create your first quiz with MCQs and timed submission for your students.</p>
+          <button class="btn btn-primary btn-sm" onclick="openQuizEditorModal(${_quizManagerCourseId})">+ Create Quiz</button>
+        </div>`;
+      return;
+    }
+
+    box.innerHTML = list.map(q => `
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:3px">
+            <h4 style="font-size:0.95rem;font-weight:600">${esc(q.title)}</h4>
+            <span class="badge ${q.published ? 'badge-green' : 'badge-ghost'}">${q.published ? 'Published' : 'Draft'}</span>
+          </div>
+          <div style="font-size:0.74rem;color:var(--text-mid);display:flex;gap:0.85rem">
+            <span>${q.questions.length} Question${q.questions.length !== 1 ? 's' : ''}</span>
+            <span>Time: ${q.timeLimit ? q.timeLimit + ' mins' : 'Untimed'}</span>
+            ${q.dueDate ? `<span>Due: ${esc(q.dueDate)}</span>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;gap:0.4rem">
+          <button class="btn btn-outline btn-sm" onclick="toggleQuizPublish('${q._id}', ${!q.published})">${q.published ? 'Unpublish' : 'Publish'}</button>
+          <button class="btn btn-outline btn-sm" onclick="openQuizEditorModal(${_quizManagerCourseId}, '${q._id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" style="padding:0.2rem 0.5rem" onclick="deleteTeacherQuiz('${q._id}')">&#215;</button>
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    box.innerHTML = `<div style="color:var(--danger);padding:1rem">${esc(err.message)}</div>`;
+  }
+}
+
+async function toggleQuizPublish(quizId, newStatus) {
+  try {
+    await apiFetch('/quizzes/' + quizId, {
+      method: 'PUT',
+      body: JSON.stringify({ published: newStatus }),
+    });
+    showToast(newStatus ? 'Quiz published to students.' : 'Quiz unpublished.');
+    await reloadQuizManagerList();
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function deleteTeacherQuiz(quizId) {
+  if (!confirm('Are you sure you want to delete this quiz?')) return;
+  try {
+    await apiFetch('/quizzes/' + quizId, { method: 'DELETE' });
+    showToast('Quiz deleted.');
+    await reloadQuizManagerList();
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function openQuizEditorModal(courseId, quizId = null) {
+  let modal = document.getElementById('quiz-builder-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'quiz-builder-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:480;backdrop-filter:blur(2px);padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  if (quizId) {
+    try {
+      _editingQuiz = await apiFetch('/quizzes/' + quizId);
+    } catch (err) {
+      showToast('Failed to load quiz for editing.');
+      return;
+    }
+  } else {
+    _editingQuiz = {
+      title: '',
+      courseId: Number(courseId),
+      timeLimit: 15,
+      dueDate: '',
+      published: true,
+      questions: [
+        { q: '', options: ['', '', '', ''], correct: 0, explanation: '' }
+      ]
+    };
+  }
+
+  renderQuizBuilderForm();
+  modal.style.display = 'flex';
+}
+
+function closeQuizBuilderModal() {
+  const m = document.getElementById('quiz-builder-modal');
+  if (m) m.style.display = 'none';
+}
+
+function renderQuizBuilderForm() {
+  const modal = document.getElementById('quiz-builder-modal');
+  if (!modal || !_editingQuiz) return;
+
+  const qList = _editingQuiz.questions || [];
+
+  const questionsHtml = qList.map((q, qi) => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+        <label style="font-weight:600;font-size:0.8rem">Question ${qi + 1}</label>
+        ${qList.length > 1 ? `<button class="btn btn-danger btn-sm" style="padding:0.15rem 0.4rem;font-size:0.7rem" onclick="removeBuilderQuestion(${qi})">&#215; Remove</button>` : ''}
+      </div>
+      <input type="text" class="form-control" style="font-size:0.82rem;margin-bottom:0.65rem" placeholder="Type question text..." value="${esc(q.q || '')}" oninput="_editingQuiz.questions[${qi}].q = this.value">
+
+      <div style="font-size:0.72rem;color:var(--text-light);text-transform:uppercase;margin-bottom:0.35rem">Options &amp; Correct Answer</div>
+      ${(q.options || []).map((opt, oi) => `
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem">
+          <input type="radio" name="correct-q-${qi}" value="${oi}" ${q.correct === oi ? 'checked' : ''} onchange="_editingQuiz.questions[${qi}].correct = ${oi}" title="Mark as correct answer">
+          <span style="font-family:var(--font-mono);font-size:0.75rem;font-weight:600;color:var(--text-mid);width:16px">${String.fromCharCode(65 + oi)}</span>
+          <input type="text" class="form-control" style="font-size:0.8rem;flex:1" placeholder="Option ${String.fromCharCode(65 + oi)}" value="${esc(opt)}" oninput="_editingQuiz.questions[${qi}].options[${oi}] = this.value">
+          ${q.options.length > 2 ? `<button class="btn btn-ghost btn-sm" style="padding:0.2rem 0.4rem" onclick="removeBuilderOption(${qi}, ${oi})">&#215;</button>` : ''}
+        </div>`).join('')}
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem">
+        ${q.options.length < 6 ? `<button class="btn btn-outline btn-sm" style="font-size:0.72rem;padding:0.2rem 0.5rem" onclick="addBuilderOption(${qi})">+ Add Option</button>` : '<span></span>'}
+        <input type="text" class="form-control" style="font-size:0.75rem;max-width:280px" placeholder="Explanation for students (optional)" value="${esc(q.explanation || '')}" oninput="_editingQuiz.questions[${qi}].explanation = this.value">
+      </div>
+    </div>`).join('');
+
+  modal.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:720px;max-height:88vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg);overflow:hidden">
+      <div style="padding:1.1rem 1.4rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <h3 style="font-size:1rem">${_editingQuiz._id ? 'Edit Quiz' : 'Create Quiz'}</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeQuizBuilderModal()">Close</button>
+      </div>
+      <div style="padding:1.25rem 1.4rem;overflow-y:auto;flex:1">
+        <div class="grid-2" style="gap:0.75rem;margin-bottom:0.75rem">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="req">Quiz Title</label>
+            <input type="text" class="form-control" id="qb-title" placeholder="e.g. Chapter 4: Cell Structure MCQ Test" value="${esc(_editingQuiz.title || '')}" oninput="_editingQuiz.title = this.value">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Time Limit (Minutes)</label>
+            <input type="number" class="form-control" id="qb-time" placeholder="15" min="0" max="180" value="${_editingQuiz.timeLimit !== undefined ? _editingQuiz.timeLimit : 15}" oninput="_editingQuiz.timeLimit = Number(this.value)">
+          </div>
+        </div>
+        <div class="grid-2" style="gap:0.75rem;margin-bottom:1.25rem">
+          <div class="form-group" style="margin-bottom:0">
+            <label>Due Date</label>
+            <input type="date" class="form-control" id="qb-due" value="${esc(_editingQuiz.dueDate || '')}" oninput="_editingQuiz.dueDate = this.value">
+          </div>
+          <div style="display:flex;align-items:center;gap:0.5rem;padding-top:1.4rem">
+            <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;font-weight:600;font-size:0.85rem">
+              <input type="checkbox" id="qb-published" ${_editingQuiz.published ? 'checked' : ''} onchange="_editingQuiz.published = this.checked">
+              Publish immediately to students
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+          <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-light)">Questions</div>
+          <button class="btn btn-outline btn-sm" onclick="addBuilderQuestion()">+ Add Question</button>
+        </div>
+        <div id="qb-questions-wrap">${questionsHtml}</div>
+      </div>
+      <div style="padding:0.9rem 1.4rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--bg)">
+        <button class="btn btn-outline btn-sm" onclick="addBuilderQuestion()">+ Add Another Question</button>
+        <div style="display:flex;gap:0.5rem">
+          <button class="btn btn-ghost btn-sm" onclick="closeQuizBuilderModal()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="qb-save-btn" onclick="saveTeacherQuiz()">Save Quiz</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addBuilderQuestion() {
+  _editingQuiz.questions.push({ q: '', options: ['', '', '', ''], correct: 0, explanation: '' });
+  renderQuizBuilderForm();
+}
+function removeBuilderQuestion(idx) {
+  _editingQuiz.questions.splice(idx, 1);
+  renderQuizBuilderForm();
+}
+function addBuilderOption(qIdx) {
+  _editingQuiz.questions[qIdx].options.push('');
+  renderQuizBuilderForm();
+}
+function removeBuilderOption(qIdx, optIdx) {
+  _editingQuiz.questions[qIdx].options.splice(optIdx, 1);
+  if (_editingQuiz.questions[qIdx].correct >= _editingQuiz.questions[qIdx].options.length) {
+    _editingQuiz.questions[qIdx].correct = 0;
+  }
+  renderQuizBuilderForm();
+}
+
+async function saveTeacherQuiz() {
+  const btn = document.getElementById('qb-save-btn');
+  if (!_editingQuiz) return;
+
+  const title = (_editingQuiz.title || '').trim();
+  if (!title) { showToast('Please enter a quiz title.'); return; }
+
+  for (let i = 0; i < _editingQuiz.questions.length; i++) {
+    const q = _editingQuiz.questions[i];
+    if (!q.q.trim()) { showToast('Question ' + (i + 1) + ' is missing text.'); return; }
+    const filledOpts = q.options.filter(o => o.trim());
+    if (filledOpts.length < 2) { showToast('Question ' + (i + 1) + ' needs at least 2 options.'); return; }
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  try {
+    if (_editingQuiz._id) {
+      await apiFetchDetailed('/quizzes/' + _editingQuiz._id, {
+        method: 'PUT',
+        body: JSON.stringify(_editingQuiz),
+      });
+      showToast('Quiz updated.');
+    } else {
+      await apiFetchDetailed('/quizzes', {
+        method: 'POST',
+        body: JSON.stringify(_editingQuiz),
+      });
+      showToast('Quiz created and saved.');
+    }
+    closeQuizBuilderModal();
+    await reloadQuizManagerList();
+  } catch (err) {
+    showToast(err.message || 'Failed to save quiz.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Quiz'; }
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 27. STUDENT QUIZ RUNNER & AUTO-GRADING
+// ══════════════════════════════════════════════════════════════
+let _activeRunnerQuiz = null;
+let _runnerTimerInterval = null;
+let _runnerSecondsLeft = 0;
+let _runnerAnswers = [];
+
+async function startQuizRunner(quizId) {
+  let modal = document.getElementById('quiz-runner-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'quiz-runner-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:500;backdrop-filter:blur(3px);padding:1rem';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = '<div style="background:var(--white);border-radius:var(--radius-xl);padding:2rem;text-align:center;color:var(--text-mid)">Loading quiz...</div>';
+  modal.style.display = 'flex';
+
+  try {
+    _activeRunnerQuiz = await apiFetch('/quizzes/' + quizId);
+    _runnerAnswers = new Array(_activeRunnerQuiz.questions.length).fill(null);
+
+    const timeLimitMins = Number(_activeRunnerQuiz.timeLimit || 0);
+    _runnerSecondsLeft = timeLimitMins > 0 ? timeLimitMins * 60 : 0;
+
+    renderQuizRunnerScreen();
+
+    if (_runnerSecondsLeft > 0) {
+      if (_runnerTimerInterval) clearInterval(_runnerTimerInterval);
+      _runnerTimerInterval = setInterval(() => {
+        _runnerSecondsLeft--;
+        const timerEl = document.getElementById('runner-timer-val');
+        if (timerEl) {
+          const m = Math.floor(_runnerSecondsLeft / 60);
+          const sec = _runnerSecondsLeft % 60;
+          timerEl.textContent = String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+          const badge = document.getElementById('runner-timer-badge');
+          if (badge && _runnerSecondsLeft <= 120) badge.classList.add('urgent');
+        }
+        if (_runnerSecondsLeft <= 0) {
+          clearInterval(_runnerTimerInterval);
+          submitQuizRunner(true);
+        }
+      }, 1000);
+    }
+  } catch (err) {
+    modal.innerHTML = `<div style="background:var(--white);padding:2rem;border-radius:var(--radius-xl);text-align:center">
+      <div style="color:var(--danger);margin-bottom:1rem">${esc(err.message)}</div>
+      <button class="btn btn-primary btn-sm" onclick="closeQuizRunnerModal()">Close</button>
+    </div>`;
+  }
+}
+
+function closeQuizRunnerModal() {
+  if (_runnerTimerInterval) clearInterval(_runnerTimerInterval);
+  const m = document.getElementById('quiz-runner-modal');
+  if (m) m.style.display = 'none';
+}
+
+function renderQuizRunnerScreen() {
+  const modal = document.getElementById('quiz-runner-modal');
+  if (!modal || !_activeRunnerQuiz) return;
+
+  const qList = _activeRunnerQuiz.questions || [];
+  const timeLimit = _activeRunnerQuiz.timeLimit || 0;
+  const initialTimeStr = timeLimit > 0 ? String(timeLimit).padStart(2, '0') + ':00' : 'Untimed';
+
+  const questionsHtml = qList.map((q, qi) => `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.1rem;margin-bottom:1rem">
+      <div style="font-weight:600;font-size:0.88rem;color:var(--text-dark);margin-bottom:0.75rem">
+        <span style="color:var(--blue)">Q${qi + 1}.</span> ${esc(q.q)}
+      </div>
+      ${(q.options || []).map((opt, oi) => `
+        <label style="display:flex;align-items:center;gap:0.65rem;padding:0.45rem 0.65rem;border-radius:var(--radius-sm);margin-bottom:0.35rem;cursor:pointer;border:1px solid var(--border);background:var(--white);transition:background 0.1s"
+               class="quiz-runner-opt" id="opt-label-${qi}-${oi}">
+          <input type="radio" name="runner-q-${qi}" value="${oi}" onchange="selectRunnerAnswer(${qi}, ${oi})">
+          <span style="font-family:var(--font-mono);font-size:0.75rem;font-weight:700;color:var(--blue);width:16px">${String.fromCharCode(65 + oi)}</span>
+          <span style="font-size:0.82rem;color:var(--text-dark)">${esc(opt)}</span>
+        </label>`).join('')}
+    </div>`).join('');
+
+  modal.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg);overflow:hidden">
+      <div style="padding:1.1rem 1.4rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--white);z-index:2">
+        <div>
+          <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.07em">Timed Quiz Assessment</div>
+          <h3 style="font-size:1.05rem;color:var(--text-dark)">${esc(_activeRunnerQuiz.title)}</h3>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem">
+          ${timeLimit > 0 ? `
+            <div class="quiz-timer-badge" id="runner-timer-badge">
+              <span>Time Left:</span>
+              <span id="runner-timer-val">${initialTimeStr}</span>
+            </div>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="closeQuizRunnerModal()">Exit</button>
+        </div>
+      </div>
+      <div style="padding:1.25rem 1.5rem;overflow-y:auto;flex:1" id="runner-questions-wrap">
+        ${questionsHtml}
+      </div>
+      <div style="padding:0.9rem 1.4rem;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--bg)">
+        <div style="font-size:0.75rem;color:var(--text-mid)">Answer all questions before submitting.</div>
+        <button class="btn btn-primary btn-sm" id="runner-submit-btn" onclick="submitQuizRunner(false)">Submit Answers &rarr;</button>
+      </div>
+    </div>`;
+}
+
+function selectRunnerAnswer(qIdx, optIdx) {
+  _runnerAnswers[qIdx] = optIdx;
+  document.querySelectorAll(`[id^="opt-label-${qIdx}-"]`).forEach(l => l.style.borderColor = 'var(--border)');
+  const selLabel = document.getElementById(`opt-label-${qIdx}-${optIdx}`);
+  if (selLabel) selLabel.style.borderColor = 'var(--blue)';
+}
+
+async function submitQuizRunner(isAuto = false) {
+  if (_runnerTimerInterval) clearInterval(_runnerTimerInterval);
+  const btn = document.getElementById('runner-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Grading...'; }
+
+  try {
+    const res = await apiFetchDetailed('/quizzes/' + _activeRunnerQuiz._id + '/attempt', {
+      method: 'POST',
+      body: JSON.stringify({ answers: _runnerAnswers }),
+    });
+
+    renderQuizRunnerResult(res);
+    try {
+      const freshUser = await apiFetch('/auth/me');
+      if (freshUser) saveSession(getToken(), freshUser);
+    } catch (e) {}
+  } catch (err) {
+    showToast(err.message || 'Failed to submit quiz.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Answers →'; }
+  }
+}
+
+function renderQuizRunnerResult(res) {
+  const modal = document.getElementById('quiz-runner-modal');
+  if (!modal || !_activeRunnerQuiz) return;
+
+  const qList = _activeRunnerQuiz.questions || [];
+  const pct = res.percentage || 0;
+  const passed = res.passed;
+
+  const reviewHtml = qList.map((q, qi) => {
+    const studentAns = _runnerAnswers[qi];
+    const correctAns = res.correctAnswers[qi];
+    const isCorrect  = studentAns === correctAns;
+    const explanation = res.explanations[qi];
+
+    return `
+      <div style="background:${isCorrect ? '#f0fdf4' : '#fef2f2'};border:1px solid ${isCorrect ? '#bbf7d0' : '#fecaca'};border-radius:var(--radius);padding:1rem;margin-bottom:0.85rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem">
+          <div style="font-weight:600;font-size:0.85rem;color:var(--text-dark)">Q${qi + 1}. ${esc(q.q)}</div>
+          <span class="badge ${isCorrect ? 'badge-green' : 'badge-red'}">${isCorrect ? 'Correct (+1)' : 'Incorrect (0)'}</span>
+        </div>
+        <div style="font-size:0.78rem;margin-bottom:0.35rem">
+          Your Answer: <strong>${studentAns !== null ? String.fromCharCode(65 + studentAns) + ' - ' + esc(q.options[studentAns]) : 'Not answered'}</strong>
+        </div>
+        ${!isCorrect ? `
+          <div style="font-size:0.78rem;color:#15803d;margin-bottom:0.35rem">
+            Correct Answer: <strong>${String.fromCharCode(65 + correctAns)} - ${esc(q.options[correctAns])}</strong>
+          </div>` : ''}
+        ${explanation ? `<div style="font-size:0.74rem;color:var(--text-mid);margin-top:0.35rem;border-top:1px dashed rgba(0,0,0,0.1);padding-top:0.35rem"><em>Explanation:</em> ${esc(explanation)}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  modal.innerHTML = `
+    <div style="background:var(--white);border-radius:var(--radius-xl);width:100%;max-width:760px;max-height:90vh;display:flex;flex-direction:column;border:1px solid var(--border);box-shadow:var(--shadow-lg);overflow:hidden">
+      <div style="padding:1.4rem;border-bottom:1px solid var(--border);text-align:center;background:${passed ? '#f0fdf4' : '#fff7ed'}">
+        <h3 style="font-size:1.15rem;color:${passed ? '#166534' : '#9a3412'};margin-bottom:0.25rem">
+          ${passed ? 'Assessment Completed' : 'Assessment Completed'}
+        </h3>
+        <div style="font-size:1.5rem;font-weight:700;font-family:var(--font-mono);color:${passed ? '#15803d' : '#c2410c'}">
+          ${res.score} / ${res.total} (${pct}%)
+        </div>
+        <div style="font-size:0.8rem;color:var(--text-mid);margin-top:0.25rem">
+          ${passed ? 'Well done! Your score has been recorded to your performance history.' : 'Review your incorrect questions below and revise topic notes.'}
+        </div>
+      </div>
+      <div style="padding:1.25rem 1.5rem;overflow-y:auto;flex:1">
+        <div style="font-weight:700;font-size:0.8rem;text-transform:uppercase;letter-spacing:0.07em;color:var(--text-light);margin-bottom:0.75rem">Question Review</div>
+        ${reviewHtml}
+      </div>
+      <div style="padding:0.9rem 1.4rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;background:var(--bg)">
+        <button class="btn btn-primary btn-sm" onclick="closeQuizRunnerModal();runPageInitializers()">Finish &amp; Close</button>
+      </div>
+    </div>`;
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 28. ADMIN INQUIRIES MANAGEMENT
+// ══════════════════════════════════════════════════════════════
+let _adminInquiriesCache = [];
+let _currentInquiryFilter = 'all';
+let _activeInquiryDetail = null;
+
+async function renderAdminInquiries() {
+  const tbody = document.getElementById('admin-inquiries-tbody');
+  if (!tbody) return;
+
+  try {
+    const data = await apiFetch('/inquiries' + (_currentInquiryFilter !== 'all' ? '?status=' + _currentInquiryFilter : ''));
+    _adminInquiriesCache = data.inquiries || [];
+
+    const badge = document.getElementById('inquiries-nav-badge');
+    if (badge) {
+      badge.textContent = data.unreadCount || 0;
+      badge.style.display = data.unreadCount > 0 ? 'inline' : 'none';
+    }
+
+    if (!_adminInquiriesCache.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2.5rem;color:var(--text-light)">No inquiries found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = _adminInquiriesCache.map(inq => {
+      const statusBadge = inq.status === 'unread'
+        ? '<span class="badge badge-blue">Unread</span>'
+        : inq.status === 'replied'
+        ? '<span class="badge badge-green">Replied</span>'
+        : '<span class="badge badge-ghost">Read</span>';
+
+      const dateStr = inq.createdAt ? inq.createdAt.slice(0, 10) : '-';
+      const msgPreview = esc(inq.message || '').slice(0, 60) + ((inq.message || '').length > 60 ? '...' : '');
+
+      return `
+        <tr style="${inq.status === 'unread' ? 'background:rgba(27,95,173,0.02)' : ''}">
+          <td style="padding:0.75rem 1rem;font-family:var(--font-mono);font-size:0.78rem">${esc(dateStr)}</td>
+          <td style="padding:0.75rem 1rem;font-weight:600;font-size:0.85rem">${esc(inq.name)}</td>
+          <td style="padding:0.75rem 1rem;font-size:0.8rem">
+            <div>${esc(inq.email)}</div>
+            ${inq.phone ? `<div style="font-size:0.72rem;color:var(--text-light);font-family:var(--font-mono)">${esc(inq.phone)}</div>` : ''}
+          </td>
+          <td style="padding:0.75rem 1rem;font-size:0.8rem">${esc(inq.subject)}</td>
+          <td style="padding:0.75rem 1rem;font-size:0.8rem;color:var(--text-mid)">${msgPreview}</td>
+          <td style="padding:0.75rem 1rem">${statusBadge}</td>
+          <td style="padding:0.75rem 1rem;text-align:right">
+            <button class="btn btn-outline btn-sm" style="padding:0.25rem 0.55rem;font-size:0.72rem" onclick="openInquiryDetailModal('${inq._id}')">View</button>
+            <button class="btn btn-danger btn-sm" style="padding:0.25rem 0.45rem;font-size:0.72rem;margin-left:4px" onclick="deleteInquiryDirect('${inq._id}')">&#215;</button>
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger);padding:1.5rem;text-align:center">${esc(err.message)}</td></tr>`;
+  }
+}
+
+function filterInquiries(status, btn) {
+  _currentInquiryFilter = status;
+  document.querySelectorAll('.inq-filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderAdminInquiries();
+}
+
+function openInquiryDetailModal(id) {
+  const inq = _adminInquiriesCache.find(x => x._id === id);
+  if (!inq) return;
+  _activeInquiryDetail = inq;
+
+  setText('inq-modal-subject', inq.subject);
+  setText('inq-modal-name', inq.name);
+  setText('inq-modal-contact', inq.email + (inq.phone ? ' &bull; ' + inq.phone : ''));
+  setText('inq-modal-date', inq.createdAt ? inq.createdAt.replace('T', ' ').slice(0, 16) : '-');
+  setText('inq-modal-message', inq.message);
+
+  const replyInput = document.getElementById('inq-modal-replynote');
+  if (replyInput) replyInput.value = inq.replyNote || '';
+
+  const statusBadge = document.getElementById('inq-modal-status-badge');
+  if (statusBadge) {
+    statusBadge.innerHTML = inq.status === 'unread'
+      ? '<span class="badge badge-blue">Unread</span>'
+      : inq.status === 'replied'
+      ? '<span class="badge badge-green">Replied</span>'
+      : '<span class="badge badge-ghost">Read</span>';
+  }
+
+  const markReadBtn = document.getElementById('inq-modal-markread-btn');
+  if (markReadBtn) {
+    markReadBtn.style.display = inq.status === 'unread' ? 'inline-flex' : 'none';
+  }
+
+  const m = document.getElementById('inquiry-detail-modal');
+  if (m) m.style.display = 'flex';
+
+  // If unread, auto-mark read
+  if (inq.status === 'unread') {
+    apiFetch('/inquiries/' + inq._id, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'read' }),
+    }).then(() => {
+      inq.status = 'read';
+      renderAdminInquiries();
+    }).catch(() => {});
+  }
+}
+
+function closeInquiryModal() {
+  const m = document.getElementById('inquiry-detail-modal');
+  if (m) m.style.display = 'none';
+}
+
+async function markCurrentInquiryRead() {
+  if (!_activeInquiryDetail) return;
+  try {
+    await apiFetch('/inquiries/' + _activeInquiryDetail._id, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'read' }),
+    });
+    _activeInquiryDetail.status = 'read';
+    closeInquiryModal();
+    renderAdminInquiries();
+    showToast('Inquiry marked as read.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function saveCurrentInquiryReply() {
+  if (!_activeInquiryDetail) return;
+  const replyNote = (document.getElementById('inq-modal-replynote')?.value || '').trim();
+
+  try {
+    await apiFetch('/inquiries/' + _activeInquiryDetail._id, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'replied', replyNote }),
+    });
+    _activeInquiryDetail.status = 'replied';
+    _activeInquiryDetail.replyNote = replyNote;
+    closeInquiryModal();
+    renderAdminInquiries();
+    showToast('Inquiry marked as replied.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function deleteCurrentInquiry() {
+  if (!_activeInquiryDetail) return;
+  if (!confirm('Are you sure you want to delete this inquiry?')) return;
+  try {
+    await apiFetch('/inquiries/' + _activeInquiryDetail._id, { method: 'DELETE' });
+    closeInquiryModal();
+    renderAdminInquiries();
+    showToast('Inquiry deleted.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+async function deleteInquiryDirect(id) {
+  if (!confirm('Delete this inquiry?')) return;
+  try {
+    await apiFetch('/inquiries/' + id, { method: 'DELETE' });
+    renderAdminInquiries();
+    showToast('Inquiry deleted.');
+  } catch (err) {
+    showToast(err.message);
+  }
+}
+
+function checkSameDayClassReminders() {
+  const session = getSession();
+  if (!session || session.role !== 'student') return;
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const todayName = days[new Date().getDay()];
+  const todayDateStr = new Date().toISOString().slice(0, 10);
+
+  const myClassesToday = (TEACHER_SCHEDULE || []).filter(r => r.day === todayName);
+  myClassesToday.forEach(cls => {
+    const meetingUrl = cls.link || (/^https?:\/\//i.test(cls.room) ? cls.room : '');
+    const reminderId = 'remind_' + (cls._id || cls.id || (cls.course + '_' + cls.time)) + '_' + todayDateStr;
+    const alreadyNotified = NOTIFICATIONS.some(n =>
+      n.title && n.title.includes(cls.course) &&
+      n.body && n.body.includes(cls.time) &&
+      n.createdAt && n.createdAt.slice(0, 10) === todayDateStr
+    );
+    if (!alreadyNotified && !localStorage.getItem(reminderId)) {
+      localStorage.setItem(reminderId, 'true');
+      const linkText = meetingUrl ? ' Class link: ' + meetingUrl : (cls.room ? ' Room: ' + cls.room : '');
+      const reminderNotif = {
+        _id: reminderId,
+        type: 'live',
+        title: 'Class Today: ' + cls.course,
+        body: 'Your ' + (cls.subject || '') + ' class is scheduled for today at ' + cls.time + ' (' + cls.type + ', ' + (cls.duration || 90) + ' min).' + linkText,
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      NOTIFICATIONS.unshift(reminderNotif);
+      renderNotifBell();
+      if (typeof updateNavBadge === 'function') updateNavBadge();
+    }
+  });
+}
+
+async function updateAdminRollNoPreview() {
+  const testVal = (document.getElementById('asm-entryTest')?.value || 'MDCAT').trim();
+  try {
+    const data = await apiFetch('/students/next-roll?test=' + encodeURIComponent(testVal));
+    if (data && data.nextRollNo) {
+      const el = document.getElementById('asm-rollNo');
+      if (el && !document.getElementById('asm-id')?.value) {
+        el.value = data.nextRollNo;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch next roll number preview:', err.message);
+  }
+}
+
+function renderCourseLiveBanner(cid) {
+  const banner = document.getElementById('cd-live-banner');
+  if (!banner) return;
+  const classes = (TEACHER_SCHEDULE || []).filter(r => r.courseId === cid);
+  if (!classes.length) { banner.innerHTML = ''; return; }
+
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const todayName = days[new Date().getDay()];
+  const todayCls = classes.find(c => c.day === todayName) || classes[0];
+
+  const meetingUrl = todayCls.link || (/^https?:\/\//i.test(todayCls.room) ? todayCls.room : '');
+  const isLiveActive = isClassTimeActive(todayCls.day, todayCls.time, todayCls.duration);
+
+  let joinButtonHtml = '';
+  if (meetingUrl) {
+    if (isLiveActive) {
+      joinButtonHtml = `<a href="${escAttr(meetingUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-live-join active">Join Live Class Now</a>`;
+    } else {
+      joinButtonHtml = `<button class="btn btn-sm btn-live-join disabled" disabled title="Join activates 20 minutes before class">Live Link (at ${esc(todayCls.time)})</button>`;
+    }
+  }
+
+  banner.innerHTML = `
+    <div class="card" style="margin-bottom:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:var(--bg);border-color:var(--border)">
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <div style="width:36px;height:36px;border-radius:var(--radius);background:var(--primary-light);color:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.75rem">LIVE</div>
+        <div>
+          <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.06em">${todayCls.day === todayName ? 'Class Today' : 'Next Scheduled Class'} (${esc(todayCls.type)})</div>
+          <div style="font-weight:600;font-size:0.9rem;color:var(--text-dark)">${esc(todayCls.day)} at ${esc(todayCls.time)} · ${esc(todayCls.room || (meetingUrl ? 'Online' : 'TBA'))}</div>
+        </div>
+      </div>
+      ${joinButtonHtml}
+    </div>`;
+}
+
+async function loadStudentCourseQuizzes(cid) {
+  const card = document.getElementById('course-quizzes-card');
+  const listEl = document.getElementById('course-quizzes-list');
+  const badgeEl = document.getElementById('course-quizzes-badge');
+  if (!card || !listEl) return;
+
+  try {
+    const quizzes = await apiFetch('/quizzes?courseId=' + cid);
+    const published = (quizzes || []).filter(q => q.published !== false);
+
+    if (!published.length) {
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = 'block';
+    if (badgeEl) badgeEl.textContent = published.length + (published.length === 1 ? ' Quiz' : ' Quizzes');
+
+    const student = getActiveStudent();
+    const scores = student ? (student.quizScores || []) : [];
+
+    listEl.innerHTML = published.map(q => {
+      const priorScore = scores.find(s => s.quizId === q._id || s.title === q.title);
+      const isPastDue = q.dueDate && new Date(q.dueDate) < new Date();
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.85rem 1rem;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);flex-wrap:wrap;gap:0.75rem">
+          <div>
+            <div style="font-weight:600;font-size:0.9rem;color:var(--text-dark);margin-bottom:0.2rem">${esc(q.title)}</div>
+            <div style="font-size:0.75rem;color:var(--text-light);display:flex;gap:0.85rem;align-items:center;flex-wrap:wrap">
+              <span>${q.questions ? q.questions.length : 0} Questions</span>
+              <span>${q.timeLimit ? q.timeLimit + ' mins' : 'Untimed'}</span>
+              ${q.dueDate ? `<span>Due: ${esc(fmtDate(q.dueDate))}</span>` : ''}
+              ${priorScore ? `<strong style="color:var(--success)">Score: ${priorScore.score}/${priorScore.total} (${Math.round(priorScore.score / priorScore.total * 100)}%)</strong>` : ''}
+            </div>
+          </div>
+          <div>
+            <button class="btn btn-navy btn-sm" onclick="startQuizRunner('${q._id}')">
+              ${priorScore ? 'Re-attempt Quiz' : 'Attempt Quiz'}
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    console.warn('Could not load course quizzes:', err.message);
+  }
+}
+
+
+function formatRollNoInput(val) {
+  let clean = String(val || '').trim().toUpperCase();
+  if (clean.startsWith('MR-')) clean = clean.slice(3);
+  return clean;
+}
+
+function fullRollNoValue(val) {
+  let clean = String(val || '').trim().toUpperCase();
+  if (!clean) return '';
+  if (clean.startsWith('MR-')) return clean;
+  return 'MR-' + clean;
+}
+
+function validateRollNoLive(raw) {
+  const clean = formatRollNoInput(raw);
+  const full = clean ? 'MR-' + clean : '';
+  const statusEl = document.getElementById('asm-roll-status');
+  const inputEl = document.getElementById('asm-rollNo');
+  const studentId = document.getElementById('asm-id')?.value;
+
+  if (!clean) {
+    if (statusEl) { statusEl.textContent = 'Required'; statusEl.style.color = 'var(--danger)'; }
+    if (inputEl) inputEl.style.borderColor = 'var(--danger)';
+    return false;
+  }
+
+  // Format check: MR- followed by 2 digits year + test letters + - + 3+ digits seq
+  const formatOk = /^MR-\d{2}[A-Z0-9]+-\d{3,}$/.test(full);
+
+  // Uniqueness check against STUDENTS_DB
+  const duplicate = STUDENTS_DB.find(s => s.rollNo && s.rollNo.toUpperCase() === full && s.id !== studentId);
+
+  if (duplicate) {
+    if (statusEl) {
+      statusEl.textContent = 'Duplicate: Assigned to ' + (duplicate.name || 'another student');
+      statusEl.style.color = 'var(--danger)';
+    }
+    if (inputEl) inputEl.style.borderColor = 'var(--danger)';
+    return false;
+  }
+
+  if (!formatOk) {
+    if (statusEl) {
+      statusEl.textContent = 'Format: e.g. 26MDCAT-001';
+      statusEl.style.color = 'var(--warning)';
+    }
+    if (inputEl) inputEl.style.borderColor = 'var(--warning)';
+    return false;
+  }
+
+  if (statusEl) {
+    statusEl.textContent = 'Valid & Unique';
+    statusEl.style.color = 'var(--success)';
+  }
+  if (inputEl) inputEl.style.borderColor = 'var(--success)';
+  return true;
+}
+
+async function autoGenerateRollNo() {
+  const testVal = (document.getElementById('asm-entryTest')?.value || 'MDCAT').trim();
+  const batchVal = (document.getElementById('asm-batch')?.value || '').trim();
+  try {
+    const data = await apiFetch('/students/next-roll?test=' + encodeURIComponent(testVal) + '&batch=' + encodeURIComponent(batchVal));
+    if (data && data.nextRollNo) {
+      const el = document.getElementById('asm-rollNo');
+      if (el) {
+        el.value = formatRollNoInput(data.nextRollNo);
+        validateRollNoLive(el.value);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not auto-generate roll number:', err.message);
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 29. DEDICATED TEACHER ATTENDANCE SHEET PAGE (FAST-NUCES Flex)
+// ══════════════════════════════════════════════════════════════
+let _teacherAttActiveCourseId = null;
+let _teacherAttActiveSheet = null;
+let _teacherAttLatestDate = null;
+let _teacherAttLatestMarks = {};
+let _teacherAttModifiedPast = {};
+
+async function renderTeacherAttendancePage() {
+  const select = document.getElementById('teacher-att-course-select');
+  if (!select) return;
+
+  // Wait if app data is not yet ready
+  if (!CURRENT_TEACHER && !Object.keys(COURSES).length) {
+    return;
+  }
+
+  const myCourseIds = getTeacherCourseIds();
+  const myCourses = myCourseIds.map(id => COURSES[id]).filter(Boolean);
+
+  if (!myCourses.length) {
+    select.innerHTML = '<option value="">No courses assigned yet</option>';
+    const c = document.getElementById('teacher-attendance-matrix-container');
+    if (c) c.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-light)">No courses assigned to your account.</div>';
+    return;
+  }
+
+  select.innerHTML = myCourses.map(c => {
+    const batch = BATCHES.find(b => b.id === c.batchId);
+    const bName = batch ? batch.name : 'Batch ' + c.batchId;
+    return `<option value="${c.id}">${esc(c.title)} (${esc(bName)})` + `</option>`;
+  }).join('');
+
+  if (!_teacherAttActiveCourseId || !COURSES[_teacherAttActiveCourseId]) {
+    _teacherAttActiveCourseId = myCourses[0].id;
+  }
+  select.value = String(_teacherAttActiveCourseId);
+
+  const newDateInp = document.getElementById('t-att-new-date');
+  if (newDateInp && !newDateInp.value) newDateInp.value = todayISO();
+
+  await loadTeacherAttendanceCourseSheet(_teacherAttActiveCourseId);
+}
+
+async function onTeacherAttendanceCourseChange(cid) {
+  _teacherAttActiveCourseId = Number(cid);
+  await loadTeacherAttendanceCourseSheet(_teacherAttActiveCourseId);
+}
+
+async function loadTeacherAttendanceCourseSheet(cid) {
+  const container = document.getElementById('teacher-attendance-matrix-container');
+  if (!container) return;
+
+  container.innerHTML = '<div style="text-align:center;padding:2.5rem;color:var(--text-light)">Loading attendance sheet...</div>';
+
+  const start = document.getElementById('t-att-filter-start')?.value || '';
+  const end   = document.getElementById('t-att-filter-end')?.value || '';
+  let url = `/attendance/sheet/${cid}`;
+  const params = [];
+  if (start) params.push('startDate=' + encodeURIComponent(start));
+  if (end) params.push('endDate=' + encodeURIComponent(end));
+  if (params.length) url += '?' + params.join('&');
+
+  try {
+    _teacherAttActiveSheet = await apiFetch(url);
+    const course = COURSES[cid] || _teacherAttActiveSheet.course || {};
+    const batch = BATCHES.find(b => b.id === course.batchId);
+
+    // Update badges
+    const subEl = document.getElementById('t-att-subject-badge');
+    const batEl = document.getElementById('t-att-batch-badge');
+    const stuEl = document.getElementById('t-att-students-badge');
+    const sesEl = document.getElementById('t-att-sessions-badge');
+
+    if (subEl) subEl.textContent = course.subject || 'General';
+    if (batEl) batEl.textContent = batch ? batch.name : 'Batch ' + (course.batchId || '-');
+    if (stuEl) stuEl.textContent = (_teacherAttActiveSheet.students || []).length + ' Students';
+    if (sesEl) sesEl.textContent = (_teacherAttActiveSheet.dates || []).length + ' Lectures Held';
+
+    // Initialize latest class date and marks
+    _teacherAttLatestDate = todayISO();
+    _teacherAttLatestMarks = {};
+    (_teacherAttActiveSheet.students || []).forEach(s => {
+      _teacherAttLatestMarks[s.id] = 'untouched';
+    });
+    _teacherAttModifiedPast = {};
+
+    renderTeacherAttendanceMatrixTable();
+  } catch (err) {
+    container.innerHTML = `<div style="text-align:center;padding:2rem;color:var(--danger)">${esc(err.message)}</div>`;
+  }
+}
+
+function filterTeacherAttendanceSheet() {
+  if (_teacherAttActiveCourseId) loadTeacherAttendanceCourseSheet(_teacherAttActiveCourseId);
+}
+
+function clearTeacherAttendanceFilter() {
+  const s = document.getElementById('t-att-filter-start');
+  const e = document.getElementById('t-att-filter-end');
+  if (s) s.value = '';
+  if (e) e.value = '';
+  if (_teacherAttActiveCourseId) loadTeacherAttendanceCourseSheet(_teacherAttActiveCourseId);
+}
+
+function onTeacherAttLatestDateChange(newVal) {
+  if (!newVal) return;
+  _teacherAttLatestDate = newVal;
+  renderTeacherAttendanceMatrixTable();
+}
+
+function renderTeacherAttendanceMatrixTable() {
+  const container = document.getElementById('teacher-attendance-matrix-container');
+  if (!container || !_teacherAttActiveSheet) return;
+
+  const students = _teacherAttActiveSheet.students || [];
+  const dates = _teacherAttActiveSheet.dates || [];
+  const matrix = _teacherAttActiveSheet.matrix || {};
+
+  if (!students.length) {
+    container.innerHTML = '<div style="text-align:center;padding:3rem;color:var(--text-light)">No students are currently enrolled in this course.</div>';
+    return;
+  }
+
+  // Check if latest date is already recorded in past dates
+  const isLatestAlreadyRecorded = dates.includes(_teacherAttLatestDate);
+
+  let html = `
+    <table class="att-sheet-table" style="width:100%;border-collapse:collapse;font-size:0.8rem">
+      <thead>
+        <tr style="background:var(--bg);border-bottom:1px solid var(--border)">
+          <th style="padding:0.65rem 0.8rem;text-align:center;width:45px;border-right:1px solid var(--border)">#</th>
+          <th style="padding:0.65rem 0.8rem;text-align:left;min-width:130px;border-right:1px solid var(--border)">Roll No</th>
+          <th style="padding:0.65rem 0.8rem;text-align:left;min-width:180px;border-right:1px solid var(--border)">Student Name</th>`;
+
+  // Render recorded lectures (L1, L2, ...)
+  dates.forEach((d, di) => {
+    html += `<th style="padding:0.65rem 0.6rem;text-align:center;min-width:70px;border-right:1px solid var(--border)">
+      <div style="font-size:0.68rem;color:var(--text-light);font-family:var(--font-mono)">L${di + 1}</div>
+      <div style="font-size:0.75rem;font-weight:600">${esc(fmtDateShort(d))}</div>
+    </th>`;
+  });
+
+  // Render Rightmost Column: Latest Class (with editable date header)
+  if (!isLatestAlreadyRecorded) {
+    html += `
+      <th style="padding:0.5rem 0.65rem;text-align:center;min-width:145px;border-right:2px solid var(--navy);background:#f8fafc">
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:3px">
+          <span style="font-size:0.68rem;color:var(--navy);font-family:var(--font-mono);font-weight:700">L${dates.length + 1} (Latest Class)</span>
+        </div>
+        <input type="date" id="t-att-latest-date-input" value="${escAttr(_teacherAttLatestDate)}"
+               onchange="onTeacherAttLatestDateChange(this.value)"
+               title="Editable date for latest or delayed class"
+               style="font-size:0.72rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;width:115px;background:#fff;text-align:center">
+        <div style="display:flex;gap:4px;justify-content:center;margin-top:4px">
+          <button type="button" class="btn btn-ghost btn-xs" style="font-size:0.65rem;padding:1px 5px" onclick="teacherMarkLatestAll('present')" title="Mark all students present">All P</button>
+          <button type="button" class="btn btn-ghost btn-xs" style="font-size:0.65rem;padding:1px 5px" onclick="teacherMarkLatestAll('untouched')" title="Clear / No class held">Clear</button>
+        </div>
+      </th>`;
+  }
+
+  html += `
+          <th style="padding:0.65rem 0.8rem;text-align:center;width:95px;border-right:1px solid var(--border)">Attended</th>
+          <th style="padding:0.65rem 0.8rem;text-align:center;width:85px;border-right:1px solid var(--border)">Percent</th>
+          <th style="padding:0.65rem 0.8rem;text-align:center;width:115px">Flex Standing</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  const isLatestTouched = Object.values(_teacherAttLatestMarks).some(v => v && v !== 'untouched');
+  const countLatestInTotal = !isLatestAlreadyRecorded && isLatestTouched;
+  const effectiveTotal = dates.length + (countLatestInTotal ? 1 : 0);
+
+  students.forEach((s, idx) => {
+    let attended = 0;
+    let late = 0;
+
+    // Past cells
+    const pastCells = dates.map(d => {
+      const st = (matrix[s.id] && matrix[s.id][d]) ? matrix[s.id][d].toLowerCase() : 'present';
+      if (st === 'present' || st === 'late') {
+        attended++;
+        if (st === 'late') late++;
+      }
+      return `<td style="padding:0.4rem;text-align:center;border-right:1px solid var(--border)">
+        <button type="button" class="att-cell-btn att-${st.charAt(0)}" data-sid="${escAttr(s.id)}" data-date="${escAttr(d)}" onclick="toggleTeacherPastAttCell(this)">
+          ${st.charAt(0).toUpperCase()}
+        </button>
+      </td>`;
+    }).join('');
+
+    // Latest column cell
+    let latestCellHtml = '';
+    if (!isLatestAlreadyRecorded) {
+      const curMark = _teacherAttLatestMarks[s.id] || 'untouched';
+      if (countLatestInTotal && (curMark === 'present' || curMark === 'late')) {
+        attended++;
+        if (curMark === 'late') late++;
+      }
+      const markLabel = curMark === 'untouched' ? '-' : curMark.charAt(0).toUpperCase();
+      const markClass = curMark === 'untouched' ? 'att-unmarked' : 'att-' + curMark.charAt(0);
+
+      latestCellHtml = `
+        <td style="padding:0.4rem;text-align:center;border-right:2px solid var(--navy);background:#fcfdfe">
+          <button type="button" class="att-cell-btn ${markClass}" data-sid="${escAttr(s.id)}" onclick="toggleTeacherLatestAttCell(this)" title="Click to cycle: P &rarr; A &rarr; L &rarr; -">
+            ${markLabel}
+          </button>
+        </td>`;
+    }
+
+    const pct = effectiveTotal ? Math.round((attended / effectiveTotal) * 100) : 100;
+    const isEligible = pct >= 75;
+
+    html += `
+      <tr style="border-bottom:1px solid var(--border)" data-sid="${escAttr(s.id)}">
+        <td style="padding:0.5rem;text-align:center;color:var(--text-light);border-right:1px solid var(--border)">${idx + 1}</td>
+        <td style="padding:0.5rem 0.8rem;font-family:var(--font-mono);font-weight:600;font-size:0.78rem;border-right:1px solid var(--border)">${esc(s.rollNo || '-')}</td>
+        <td style="padding:0.5rem 0.8rem;font-weight:500;border-right:1px solid var(--border)">${esc(s.name)}</td>
+        ${pastCells}
+        ${latestCellHtml}
+        <td class="t-att-sum-cnt" style="padding:0.5rem;text-align:center;font-family:var(--font-mono);font-weight:600;border-right:1px solid var(--border)">${attended}/${effectiveTotal}</td>
+        <td class="t-att-sum-pct" style="padding:0.5rem;text-align:center;font-family:var(--font-mono);font-weight:700;color:${isEligible ? 'var(--success)' : 'var(--danger)'};border-right:1px solid var(--border)">${pct}%</td>
+        <td class="t-att-sum-status" style="padding:0.5rem;text-align:center">
+          <span class="badge ${isEligible ? 'badge-green' : 'badge-danger'}" style="font-size:0.68rem">${isEligible ? 'Eligible' : 'Shortage'}</span>
+        </td>
+      </tr>`;
+  });
+
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+function toggleTeacherPastAttCell(btn) {
+  const sid = btn.dataset.sid;
+  const date = btn.dataset.date;
+  let cur = 'p';
+  if (btn.classList.contains('att-p')) cur = 'p';
+  else if (btn.classList.contains('att-a')) cur = 'a';
+  else if (btn.classList.contains('att-l')) cur = 'l';
+
+  const next = cur === 'p' ? 'a' : cur === 'a' ? 'l' : 'p';
+  btn.className = 'att-cell-btn att-' + next;
+  btn.textContent = next.toUpperCase();
+
+  if (_teacherAttActiveSheet && _teacherAttActiveSheet.matrix && _teacherAttActiveSheet.matrix[sid]) {
+    _teacherAttActiveSheet.matrix[sid][date] = next === 'p' ? 'present' : next === 'a' ? 'absent' : 'late';
+  }
+
+  if (!_teacherAttModifiedPast[date]) _teacherAttModifiedPast[date] = true;
+  recalculateTeacherAttRow(btn.closest('tr'));
+}
+
+function toggleTeacherLatestAttCell(btn) {
+  const sid = btn.dataset.sid;
+  const cur = _teacherAttLatestMarks[sid] || 'untouched';
+  let next = 'present';
+  if (cur === 'untouched') next = 'present';
+  else if (cur === 'present') next = 'absent';
+  else if (cur === 'absent') next = 'late';
+  else if (cur === 'late') next = 'untouched';
+
+  _teacherAttLatestMarks[sid] = next;
+
+  // Re-render whole matrix so that row totals, percent, and columns update correctly
+  renderTeacherAttendanceMatrixTable();
+}
+
+function teacherMarkLatestAll(status) {
+  if (!_teacherAttActiveSheet) return;
+  const students = _teacherAttActiveSheet.students || [];
+  students.forEach(s => {
+    _teacherAttLatestMarks[s.id] = status;
+  });
+  renderTeacherAttendanceMatrixTable();
+  if (status === 'present') showToast('Marked all students as present for latest session.');
+  else showToast('Cleared latest session - untouched indicates no class held.');
+}
+
+function teacherMarkAllPresent() {
+  teacherMarkLatestAll('present');
+}
+
+function recalculateTeacherAttRow(tr) {
+  if (!tr) return;
+  const pastButtons = [...tr.querySelectorAll('.att-cell-btn:not([onclick*="Latest"])')];
+  const latestBtn = tr.querySelector('.att-cell-btn[onclick*="Latest"]');
+  const sid = tr.dataset.sid;
+
+  let attended = 0;
+  pastButtons.forEach(b => {
+    if (b.classList.contains('att-p') || b.classList.contains('att-l')) attended++;
+  });
+
+  const isLatestTouched = Object.values(_teacherAttLatestMarks).some(v => v && v !== 'untouched');
+  let total = pastButtons.length;
+  if (latestBtn && isLatestTouched) {
+    total++;
+    const mark = _teacherAttLatestMarks[sid];
+    if (mark === 'present' || mark === 'late') attended++;
+  }
+
+  const pct = total ? Math.round((attended / total) * 100) : 100;
+  const isEligible = pct >= 75;
+
+  const cntEl = tr.querySelector('.t-att-sum-cnt');
+  const pctEl = tr.querySelector('.t-att-sum-pct');
+  const statusEl = tr.querySelector('.t-att-sum-status');
+
+  if (cntEl) cntEl.textContent = attended + '/' + total;
+  if (pctEl) {
+    pctEl.textContent = pct + '%';
+    pctEl.style.color = isEligible ? 'var(--success)' : 'var(--danger)';
+  }
+  if (statusEl) {
+    statusEl.innerHTML = `<span class="badge ${isEligible ? 'badge-green' : 'badge-danger'}" style="font-size:0.68rem">${isEligible ? 'Eligible' : 'Shortage'}</span>`;
+  }
+}
+
+function teacherAddSessionDate() {
+  const newDate = (document.getElementById('t-att-new-date')?.value || '').trim();
+  if (!newDate) { showToast('Please select a date.'); return; }
+  if (!_teacherAttActiveSheet) return;
+
+  if (_teacherAttActiveSheet.dates.includes(newDate)) {
+    showToast('Date ' + newDate + ' is already recorded on the sheet.');
+    return;
+  }
+
+  _teacherAttLatestDate = newDate;
+  (_teacherAttActiveSheet.students || []).forEach(s => {
+    _teacherAttLatestMarks[s.id] = 'present';
+  });
+
+  renderTeacherAttendanceMatrixTable();
+  showToast('Set session date to ' + newDate + ' (Marked present). Click Save Attendance Sheet to commit.');
+}
+
+async function saveTeacherAttendanceSheet() {
+  if (!_teacherAttActiveSheet || !_teacherAttActiveCourseId) return;
+  const dates = _teacherAttActiveSheet.dates || [];
+  const students = _teacherAttActiveSheet.students || [];
+  const matrix = _teacherAttActiveSheet.matrix || {};
+
+  const isLatestTouched = Object.values(_teacherAttLatestMarks).some(v => v && v !== 'untouched');
+  const pastModifiedDates = Object.keys(_teacherAttModifiedPast);
+
+  if (!isLatestTouched && !pastModifiedDates.length) {
+    showToast('No class held on latest session (column untouched) and no changes made to past dates.');
+    return;
+  }
+
+  try {
+    // 1. Save any modified past dates
+    for (const d of pastModifiedDates) {
+      const entries = students.map(s => {
+        const raw = (matrix[s.id] && matrix[s.id][d]) ? matrix[s.id][d].toLowerCase() : 'present';
+        const status = (raw === 'absent' || raw === 'late') ? raw : 'present';
+        return { studentId: s.id, status, present: status !== 'absent' };
+      });
+      await apiFetch('/attendance', {
+        method: 'POST',
+        body: JSON.stringify({ courseId: _teacherAttActiveCourseId, date: d, entries }),
+      });
+    }
+
+    // 2. Save latest class if touched/marked
+    if (isLatestTouched) {
+      const latestEntries = students.map(s => {
+        const mark = _teacherAttLatestMarks[s.id];
+        // If untouched, defaults to present (teacher marked the absentees)
+        const status = (mark === 'absent' || mark === 'late') ? mark : 'present';
+        return { studentId: s.id, status, present: status !== 'absent' };
+      });
+
+      await apiFetch('/attendance', {
+        method: 'POST',
+        body: JSON.stringify({
+          courseId: _teacherAttActiveCourseId,
+          date: _teacherAttLatestDate,
+          entries: latestEntries,
+        }),
+      });
+    }
+
+    showToast('Attendance sheet saved successfully.');
+    await loadTeacherAttendanceCourseSheet(_teacherAttActiveCourseId);
+  } catch (err) {
+    showToast(err.message || 'Failed to save attendance sheet.');
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// 30. FAST-NUCES FLEX STUDENT ATTENDANCE PORTAL (Image 1 Model)
+// ══════════════════════════════════════════════════════════════
+let _studentAttActiveCourseId = null;
+let _studentAttData = null;
+let _studentAttShowAbsentsOnly = false;
+
+async function renderStudentAttendancePage() {
+  const container = document.getElementById('student-att-view');
+  if (!container) {
+    renderAttendance();
+    return;
+  }
+
+  const student = getActiveStudent();
+  if (!student) return;
+
+  const myCourses = (student.enrolledCourseIds || []).map(id => COURSES[id]).filter(Boolean);
+
+  const tabsWrap = document.getElementById('student-att-course-tabs');
+  if (!myCourses.length) {
+    if (tabsWrap) tabsWrap.innerHTML = '<span style="font-size:0.8rem;color:var(--text-light)">No enrolled courses</span>';
+    const tb = document.getElementById('student-att-lecture-tbody');
+    if (tb) tb.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2.5rem;color:var(--text-light)">You are not enrolled in any courses yet.</td></tr>';
+    renderAttendance();
+    return;
+  }
+
+  if (!_studentAttActiveCourseId || !myCourses.find(c => c.id === _studentAttActiveCourseId)) {
+    _studentAttActiveCourseId = myCourses[0].id;
+  }
+
+  // Render course tabs
+  if (tabsWrap) {
+    tabsWrap.innerHTML = myCourses.map(c => {
+      const code = c.code || ('C' + c.id + '00');
+      const active = c.id === _studentAttActiveCourseId ? 'active' : '';
+      return `<button type="button" class="flex-course-tab ${active}" onclick="onStudentAttTabClick(${c.id})">${esc(c.title)} (${esc(code)})` + `</button>`;
+    }).join('');
+  }
+
+  await loadStudentCourseAttendanceLog(_studentAttActiveCourseId);
+  renderAttendance();
+}
+
+async function onStudentAttTabClick(cid) {
+  _studentAttActiveCourseId = Number(cid);
+  const student = getActiveStudent();
+  const myCourses = (student.enrolledCourseIds || []).map(id => COURSES[id]).filter(Boolean);
+  const tabsWrap = document.getElementById('student-att-course-tabs');
+  if (tabsWrap) {
+    tabsWrap.querySelectorAll('.flex-course-tab').forEach((btn, idx) => {
+      if (myCourses[idx] && myCourses[idx].id === _studentAttActiveCourseId) btn.classList.add('active');
+      else btn.classList.remove('active');
+    });
+  }
+  await loadStudentCourseAttendanceLog(_studentAttActiveCourseId);
+}
+
+async function loadStudentCourseAttendanceLog(cid) {
+  const tbody = document.getElementById('student-att-lecture-tbody');
+  const titleEl = document.getElementById('student-att-course-title');
+  const subEl = document.getElementById('student-att-course-subtitle');
+  const barEl = document.getElementById('student-att-progress-bar');
+  const pctEl = document.getElementById('student-att-pct-label');
+  const absEl = document.getElementById('student-att-absent-hours');
+
+  if (tbody) tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-light)">Loading attendance records...</td></tr>';
+
+  try {
+    _studentAttData = await apiFetch('/attendance/my-course/' + cid);
+    const course = COURSES[cid] || _studentAttData.course || {};
+    const batch = BATCHES.find(b => b.id === course.batchId);
+    const bName = batch ? batch.name : 'Batch ' + (course.batchId || '-');
+
+    if (titleEl) {
+      const code = course.code || ('C' + course.id + '00');
+      titleEl.textContent = `${code} - ${course.title} (${bName})`;
+    }
+    if (subEl) {
+      subEl.textContent = `Subject: ${course.subject || 'General'} | Teacher: ${course.teacher || 'Department Instructor'}`;
+    }
+
+    const pct = _studentAttData.percentage || 0;
+    const total = _studentAttData.total || 0;
+    const missed = _studentAttData.missed || 0;
+
+    if (barEl) {
+      barEl.style.width = pct + '%';
+      barEl.style.background = pct >= 85
+        ? 'linear-gradient(90deg, #10b981, #059669)'
+        : pct >= 75
+        ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+        : 'linear-gradient(90deg, #ef4444, #dc2626)';
+    }
+    if (pctEl) {
+      pctEl.textContent = pct.toFixed(2) + '%';
+    }
+    if (absEl) {
+      absEl.textContent = `Absent Hours: ${missed} / ${total}h`;
+    }
+
+    renderStudentLectureTable();
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--danger)">${esc(err.message)}</td></tr>`;
+  }
+}
+
+function toggleStudentAbsentFilter() {
+  _studentAttShowAbsentsOnly = !_studentAttShowAbsentsOnly;
+  const btn = document.getElementById('student-att-filter-absent-btn');
+  if (btn) {
+    if (_studentAttShowAbsentsOnly) {
+      btn.textContent = 'Showing Absents Only (Show All)';
+      btn.className = 'btn btn-primary btn-sm';
+    } else {
+      btn.textContent = 'Show Absents Only';
+      btn.className = 'btn btn-outline btn-sm';
+    }
+  }
+  renderStudentLectureTable();
+}
+
+function renderStudentLectureTable() {
+  const tbody = document.getElementById('student-att-lecture-tbody');
+  if (!tbody || !_studentAttData) return;
+
+  let lectures = _studentAttData.lectures || [];
+  if (_studentAttShowAbsentsOnly) {
+    lectures = lectures.filter(l => l.status === 'absent');
+  }
+
+  if (!lectures.length) {
+    const msg = _studentAttShowAbsentsOnly
+      ? 'No absences recorded for this course - 100% attendance!'
+      : 'No lectures have been held or recorded for this course yet.';
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2.5rem;color:var(--text-light)">${msg}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lectures.map(l => {
+    const isP = l.status === 'present';
+    const isL = l.status === 'late';
+    const presenceChar = isP ? 'P' : isL ? 'L' : 'A';
+    const presenceColor = isP ? 'var(--success)' : isL ? 'var(--warning)' : 'var(--danger)';
+
+    return `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:0.65rem 1rem;text-align:center;font-family:var(--font-mono);font-size:0.8rem;border-right:1px solid var(--border)">${l.lectureNum}</td>
+        <td style="padding:0.65rem 1rem;font-family:var(--font-mono);font-size:0.82rem;font-weight:500;border-right:1px solid var(--border)">${esc(fmtDateShort(l.date))}</td>
+        <td style="padding:0.65rem 1rem;text-align:center;font-family:var(--font-mono);font-size:0.8rem;border-right:1px solid var(--border)">1</td>
+        <td style="padding:0.65rem 1rem;text-align:center;font-family:var(--font-mono);font-size:0.85rem;font-weight:700;color:${presenceColor}">${presenceChar}</td>
+      </tr>`;
+  }).join('');
 }

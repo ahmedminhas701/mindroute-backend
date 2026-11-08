@@ -163,6 +163,25 @@ router.get('/options', restrictTo('admin', 'teacher'), (req, res) => {
   });
 });
 
+// GET /api/students/next-roll?test=MDCAT - preview auto-generated roll number
+router.get('/next-roll', restrictTo('admin'), async (req, res) => {
+  try {
+    const Counter = require('../models/Counter');
+    const yearFull = new Date().getFullYear();
+    const yearShort = String(yearFull).slice(-2);
+    const testKey = String(req.query.test || 'MDCAT').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'MDCAT';
+    const counterDoc = await Counter.findById(`roll_${yearShort}_${testKey}`).lean();
+    const nextSeq = String((counterDoc ? counterDoc.seq : 0) + 1).padStart(3, '0');
+    res.json({
+      rollNo: `MR-${yearShort}${testKey}-${nextSeq}`,
+      year: yearFull,
+      test: testKey,
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to preview next roll number.' });
+  }
+});
+
 // GET /api/students/:id
 router.get('/:id', restrictTo('admin', 'teacher'), async (req, res) => {
   try {

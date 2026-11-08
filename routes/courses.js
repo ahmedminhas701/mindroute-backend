@@ -77,8 +77,14 @@ async function mayEditCurriculum(req, res, course) {
   const teacher = await Teacher.findOne({ email: req.user.email }).lean();
   if (!teacher) { res.status(403).json({ message: 'No teacher profile is linked to your account.' }); return false; }
 
+  if (course.teacher === teacher.id || course.teacher === teacher.name) return true;
+  if ((teacher.courseIds || []).includes(course.id)) return true;
+
   const batch = await Batch.findOne({ id: course.batchId }).lean();
-  if (batch && teacherForSubject(batch, course.subject) === teacher.id) return true;
+  if (batch) {
+    const assignedTid = teacherForSubject(batch, course.subject);
+    if (assignedTid === teacher.id || assignedTid === teacher.name) return true;
+  }
 
   res.status(403).json({ message: 'You can only edit courses you teach in this batch.' });
   return false;

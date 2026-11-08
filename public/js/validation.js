@@ -215,7 +215,9 @@
     }
 
     const now = new Date();
-    if (o.mustBePast && d.getTime() > now.getTime()) {
+    // Allow today's calendar date across global timezones (+14h window covers UTC vs local time)
+    const maxAllowedStr = new Date(Date.now() + 14 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (o.mustBePast && value > maxAllowedStr) {
       return { ok: false, value: '', error: label + ' cannot be in the future.' };
     }
     if (typeof o.minAge === 'number' || typeof o.maxAge === 'number') {
@@ -434,7 +436,7 @@
 
   const STUDENT_RULES = {
     name:          { type: 'personName', label: 'Full name',        required: true },
-    rollNo:        { type: 'rollNo',     label: 'Roll number',      required: true },
+    rollNo:        { type: 'rollNo',     label: 'Roll number',      required: false },
     email:         { type: 'email',      label: 'Email',            required: true },
     phone:         { type: 'phone',      label: 'Phone number',     required: true },
     gender:        { type: 'enum',       label: 'Gender',           required: true, values: GENDERS },

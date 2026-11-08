@@ -32,7 +32,7 @@ router.use(protect);
 // The teacher is now derived from the authenticated session, never from the body.
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const WRITABLE = ['day', 'time', 'type', 'room', 'duration', 'courseId'];
+const WRITABLE = ['day', 'time', 'type', 'room', 'link', 'duration', 'courseId'];
 
 /** The Teacher record for the caller, or null (admins have none). */
 async function callerTeacher(req) {
@@ -71,6 +71,11 @@ async function buildRow(req, res, existing) {
   if (!duration.ok) errors.duration = duration.error; else out.duration = duration.value;
 
   const room = V.normalizeText(body.room, { label: 'Room', max: 120 });
+  const link = V.normalizeText(body.link || (body.type === 'online' && /^https?:\/\//i.test(body.room) ? body.room : ''), { label: 'Class link', max: 500 });
+  out.link = link.ok ? link.value : '';
+  if (out.type === 'online' && !out.link && /^https?:\/\//i.test(out.room)) {
+    out.link = out.room;
+  }
   if (!room.ok) errors.room = room.error;
   else out.room = room.value || (out.type === 'online' ? 'Online' : 'TBA');
 
@@ -177,7 +182,8 @@ router.post('/', restrictTo('admin', 'teacher'), async (req, res) => {
     const clean = await buildRow(req, res, null);
     if (!clean) return;                       // response already sent
     const row = await TeacherSchedule.create(clean);
-    await notifyCourseStudents(row.courseId, { type: 'schedule', title: 'Class scheduled', body: `${row.course}: ${row.day} at ${row.time} (${row.type}, ${row.duration} min).` });
+    const linkNote = row.link ? ` Class link: ${row.link}` : '';
+    await notifyCourseStudents(row.courseId, { type: 'schedule', title: 'Class scheduled', body: `${row.course}: ${row.day} at ${row.time} (${row.type}, ${row.duration} min).${linkNote}` });
     res.status(201).json(row);
   } catch (err) {
     console.error('POST /schedule failed:', err);
@@ -202,7 +208,8 @@ router.put('/:id', restrictTo('admin', 'teacher'), async (req, res) => {
     if (!clean) return;
     Object.assign(existing, clean);
     await existing.save();
-    await notifyCourseStudents(existing.courseId, { type: 'schedule', title: 'Class updated', body: `${existing.course}: now ${existing.day} at ${existing.time} (${existing.type}, ${existing.duration} min).` });
+    const linkNote = existing.link ? ` Class link: ${existing.link}` : '';
+    await notifyCourseStudents(existing.courseId, { type: 'schedule', title: 'Class updated', body: `${existing.course}: now ${existing.day} at ${existing.time} (${existing.type}, ${existing.duration} min).${linkNote}` });
     
     res.json(existing);
   } catch (err) {

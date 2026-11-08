@@ -101,11 +101,13 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/subjects', require('./routes/subjects'));
 app.use('/api/attendance', require('./routes/attendance'));
+app.use('/api/quizzes', require('./routes/quizzes'));
+app.use('/api/inquiries', require('./routes/inquiries'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // / → the login page, so the root URL isn't a bare directory listing or 404.
-app.get('/', (req, res) => res.redirect('/login.html'));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 // ── 404 + error handling ─────────────────────────────────────────────
 //

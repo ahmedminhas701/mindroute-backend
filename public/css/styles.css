@@ -1,7 +1,7 @@
 /* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap'); */
 
 
-── Instant page transitions ──
+/* ── Instant page transitions ── */
 * { box-sizing: border-box; }
 
 html {
@@ -1424,4 +1424,193 @@ tbody tr:hover { background: var(--blue-pale); }
   font-family: var(--font-body);
   font-size: 0.82rem;
   border-radius: var(--radius);
+}
+
+
+/* ─── Shared Course Card Actions & Alignment ─── */
+.course-card-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+.course-card-actions .btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+  padding: 0.38rem 0.6rem;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+/* ─── Attendance Sheet Matrix Styles ─── */
+.att-sheet-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  max-height: 60vh;
+}
+.att-sheet-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.8rem;
+}
+.att-sheet-table th, .att-sheet-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  text-align: center;
+  vertical-align: middle;
+}
+.att-sheet-table th:first-child, .att-sheet-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--white);
+  z-index: 2;
+  text-align: left;
+  min-width: 160px;
+}
+.att-sheet-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 3;
+  font-weight: 600;
+  font-size: 0.72rem;
+  color: var(--text-mid);
+  white-space: nowrap;
+}
+.att-sheet-table thead th:first-child {
+  z-index: 4;
+  background: var(--bg);
+}
+.att-cell-btn {
+  width: 28px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-weight: 700;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s ease;
+}
+.att-cell-btn.present, .att-cell-btn.att-p {
+  background: var(--success-light);
+  color: var(--success);
+  border-color: #bbf7d0;
+}
+.att-cell-btn.absent, .att-cell-btn.att-a {
+  background: var(--danger-light);
+  color: var(--danger);
+  border-color: #fecaca;
+}
+.att-cell-btn.late, .att-cell-btn.att-l {
+  background: var(--warning-light);
+  color: var(--warning);
+  border-color: #fde68a;
+}
+.att-cell-btn.empty, .att-cell-btn.att-unmarked {
+  background: var(--bg);
+  color: var(--text-light);
+  border-color: var(--border);
+}
+.att-cell-btn.att-unmarked:hover {
+  background: #f1f5f9;
+  border-color: var(--text-mid);
+}
+
+/* FAST-NUCES Flex Student Attendance View */
+.flex-attendance-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+.flex-course-tab {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-mid);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  display: inline-block;
+}
+.flex-course-tab:hover {
+  background: #e2e8f0;
+  color: var(--text-dark);
+}
+.flex-course-tab.active {
+  background: var(--navy);
+  color: #ffffff !important;
+  border-color: var(--navy);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+/* ─── Quiz Runner & Timer ─── */
+.quiz-timer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.3rem 0.75rem;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #334155;
+}
+.quiz-timer-badge.urgent {
+  background: var(--danger-light);
+  border-color: #fca5a5;
+  color: var(--danger);
+  animation: pulse 1s infinite alternate;
+}
+@keyframes pulse {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
+}
+
+/* ─── Live Class Join Button States ─── */
+.btn-live-join {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.btn-live-join.active {
+  background: var(--success);
+  color: #fff;
+  border: 1px solid var(--success);
+}
+.btn-live-join.active:hover {
+  background: #14532d;
+  color: #fff;
+}
+.btn-live-join.disabled {
+  background: var(--bg);
+  color: var(--text-light);
+  border: 1px solid var(--border);
+  cursor: not-allowed;
+  pointer-events: none;
 }

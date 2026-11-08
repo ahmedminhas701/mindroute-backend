@@ -25,6 +25,7 @@ const teacherScheduleSchema = new mongoose.Schema({
   course: String,      // derived from Course.title, for display
   type: { type: String, enum: ['physical', 'online'] },
   room: String,
+  link: { type: String, trim: true, default: '' },
   duration: { type: Number, min: 15, max: 480 },   // minutes
 }, { timestamps: true });
 

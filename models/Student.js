@@ -107,6 +107,7 @@ const studentSchema = new mongoose.Schema({
   entryTest: { type: String, trim: true, default: '' },
   city:      { type: String, trim: true, maxlength: 60, default: '' },
   joinDate:  { type: String, validate: dateValidator },
+  enrollmentYear: { type: Number, default: () => new Date().getFullYear() },
 
   enrolledCourseIds: { type: [Number], default: [] },
 

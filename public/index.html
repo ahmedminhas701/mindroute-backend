@@ -1,53 +1,66 @@
 <!DOCTYPE html>
 <html lang="en">
+<head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Mind Route - MDCAT, ECAT & Beyond</title>
+  <title>Mind Route Academy - MDCAT, ECAT, BCAT &amp; NTS Preparation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
-
   <link rel="stylesheet" href="css/styles.css">
   <style>
-    /* Public page is always fully visible - no login fade needed */
     body { opacity: 1 !important; }
+    .icon-box {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius);
+      background: var(--blue-pale);
+      color: var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
 
 <nav class="pub-nav">
-  <div class="logo"><div class="logo-icon">MR</div>MIND ROUTE<div></div></div>
+  <div class="logo">
+    <div class="logo-icon">MR</div>
+    <div>Mind Route<span class="logo-sub" style="display:block;font-size:0.62rem;opacity:0.7">Academy</span></div>
+  </div>
   <div class="pub-nav-links">
     <a href="#about">About</a>
     <a href="#programs">Programs</a>
     <a href="#faq">FAQ</a>
     <a href="#contact">Contact</a>
-    <a href="login.html" class="btn btn-primary btn-sm">Student Login →</a>
+    <a href="login.html" class="btn btn-primary btn-sm">Portal Login &rarr;</a>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero" id="home">
-  <div class="hero-glow"></div>
   <div class="hero-inner">
     <div class="hero-text">
-      <div class="hero-eyebrow">🇵🇰 Pakistan's Premier Entry Test Platform</div>
-      <h1>Navigate Your <span>Path</span> to Medical & Engineering Success</h1>
-      <p class="hero-desc">Structured courses, recorded lectures, topic quizzes, assignment tracking, and live class notifications - everything your mind needs on one route.</p>
+      <div class="hero-eyebrow">Entry Test Preparation &bull; MDCAT &bull; ECAT &bull; BCAT &bull; NTS</div>
+      <h1>Navigate Your <span>Path</span> to University Admissions</h1>
+      <p class="hero-desc">Structured weekly curriculum, recorded video lectures, topic quizzes, assignment grading, and live session access designed specifically for Pakistani university aspirants.</p>
       <div class="hero-btns">
-        <a href="login.html" class="btn btn-white btn-lg">Enter Student Portal →</a>
-        <a href="#programs" class="btn btn-outline-white btn-lg">View Programs</a>
+        <a href="login.html" class="btn btn-white btn-lg">Student Portal Login &rarr;</a>
+        <a href="#programs" class="btn btn-outline-white btn-lg">Explore Programs</a>
       </div>
     </div>
     <div class="hero-card">
-      <div class="hero-card-label">Our Track Record</div>
+      <div class="hero-card-label">Academy Overview</div>
       <div class="hero-stats-grid">
         <div class="hero-stat"><div class="val">3,200+</div><div class="lbl">Students Enrolled</div></div>
         <div class="hero-stat"><div class="val">96%</div><div class="lbl">Pass Rate</div></div>
-        <div class="hero-stat"><div class="val">60+</div><div class="lbl">Expert Faculty</div></div>
+        <div class="hero-stat"><div class="val">60+</div><div class="lbl">Faculty Members</div></div>
         <div class="hero-stat"><div class="val">8</div><div class="lbl">Active Batches</div></div>
       </div>
-      <div style="margin-top:1rem;font-size:0.72rem;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem">Tests We Prepare</div>
+      <div style="margin-top:1.25rem;font-size:0.72rem;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem">Target Entry Tests</div>
       <div class="hero-tests" id="hero-tests">
         <span class="hero-test-tag">MDCAT</span>
         <span class="hero-test-tag">ECAT</span>
@@ -64,24 +77,48 @@
     <div class="about-grid">
       <div>
         <div class="section-head">
-          <div class="pub-section-label">About Mind Route</div>
-          <div class="pub-section-title">Your Brain. Your Route. Your Future.</div>
-          <p class="pub-section-sub">We combine structured curriculum, expert teachers, and smart technology to give every Pakistani student the best shot at their dream university.</p>
+          <div class="pub-section-label">About The Academy</div>
+          <div class="pub-section-title">Structured Learning with Direct Mentorship</div>
+          <p class="pub-section-sub">We combine comprehensive topic-wise syllabus coverage, subject specialists, and LMS tracking to give students every tool necessary to excel.</p>
         </div>
         <div class="about-feats">
-          <div class="about-feat"><div class="af-icon">📹</div><div class="af-text"><h4>Recorded Every Session</h4><p>All live classes are recorded and available in your portal within hours.</p></div></div>
-          <div class="about-feat"><div class="af-icon">🔔</div><div class="af-text"><h4>Smart Notifications</h4><p>Get notified when material is uploaded, assignments are due, or a live class is scheduled.</p></div></div>
-          <div class="about-feat"><div class="af-icon">📊</div><div class="af-text"><h4>Progress Tracking</h4><p>Your dashboard shows quiz scores, course completion, and attendance all in one place.</p></div></div>
-          <div class="about-feat"><div class="af-icon">💬</div><div class="af-text"><h4>Direct Teacher Contact</h4><p>Message your teacher directly from the course page - no waiting, no hassle.</p></div></div>
+          <div class="about-feat">
+            <div class="icon-box">REC</div>
+            <div class="af-text">
+              <h4>Recorded Class Sessions</h4>
+              <p>All lectures are recorded and published inside the student portal for revision and makeup study.</p>
+            </div>
+          </div>
+          <div class="about-feat">
+            <div class="icon-box">NOT</div>
+            <div class="af-text">
+              <h4>Direct Notifications</h4>
+              <p>Receive immediate alerts for new lecture notes, upcoming assignments, and live class links.</p>
+            </div>
+          </div>
+          <div class="about-feat">
+            <div class="icon-box">ANL</div>
+            <div class="af-text">
+              <h4>Performance Analytics</h4>
+              <p>Track quiz scores, attendance percentages, and assignment remarks in real time.</p>
+            </div>
+          </div>
+          <div class="about-feat">
+            <div class="icon-box">FAC</div>
+            <div class="af-text">
+              <h4>Faculty Guidance</h4>
+              <p>Message assigned subject teachers directly regarding conceptual questions or assignment feedback.</p>
+            </div>
+          </div>
         </div>
       </div>
       <div class="about-visual">
-        <div style="font-family:var(--font-display);font-size:1rem;font-weight:700;opacity:.8;margin-bottom:1.25rem;text-transform:uppercase;letter-spacing:.08em">By The Numbers</div>
+        <div style="font-family:var(--font-body);font-size:0.8rem;font-weight:700;color:var(--text-light);margin-bottom:1.25rem;text-transform:uppercase;letter-spacing:.08em">Key Milestones</div>
         <div class="av-grid">
-          <div class="av-stat"><div class="n">7+</div><div class="l">Years Running</div></div>
-          <div class="av-stat"><div class="n">15,000+</div><div class="l">Alumni</div></div>
+          <div class="av-stat"><div class="n">7+</div><div class="l">Years Active</div></div>
+          <div class="av-stat"><div class="n">15,000+</div><div class="l">Alumni Students</div></div>
           <div class="av-stat"><div class="n">600+</div><div class="l">Video Lectures</div></div>
-          <div class="av-stat"><div class="n">4</div><div class="l">Cities Covered</div></div>
+          <div class="av-stat"><div class="n">4</div><div class="l">Regional Centers</div></div>
         </div>
       </div>
     </div>
@@ -92,17 +129,47 @@
 <section class="pub-section" id="programs">
   <div class="pub-section-inner">
     <div class="section-head" style="text-align:center">
-      <div class="pub-section-label">Our Programs</div>
-      <div class="pub-section-title">Choose Your Entry Test</div>
-      <p class="pub-section-sub" style="margin:0 auto">Each program is built around a weekly curriculum with video lectures, notes, quizzes, and assignments.</p>
+      <div class="pub-section-label">Academic Programs</div>
+      <div class="pub-section-title">Select Your Entry Test Stream</div>
+      <p class="pub-section-sub" style="margin:0 auto">Weekly structured curriculum covering theory, past papers, problem solving, and timed mock tests.</p>
     </div>
     <div class="prog-grid">
-      <div class="prog-card"><div class="prog-icon">🩺</div><span class="badge badge-blue" style="margin-bottom:.6rem">MDCAT</span><h3>MDCAT Complete Prep</h3><p>Full Biology, Chemistry, Physics & English - aligned to PMC syllabus with weekly mock tests.</p><div class="prog-meta"><span>📹 120 Lectures</span><span>📝 80+ Quizzes</span><span>📅 10 Months</span></div></div>
-      <div class="prog-card"><div class="prog-icon">⚙️</div><span class="badge badge-green" style="margin-bottom:.6rem">ECAT</span><h3>ECAT Complete Prep</h3><p>Maths, Physics, Chemistry & English for all major Engineering universities in Pakistan.</p><div class="prog-meta"><span>📹 100 Lectures</span><span>📝 70+ Quizzes</span><span>📅 8 Months</span></div></div>
-      <div class="prog-card"><div class="prog-icon">💼</div><span class="badge badge-orange" style="margin-bottom:.6rem">BCAT</span><h3>BCAT Prep</h3><p>Business aptitude, maths, and English preparation for business college admissions.</p><div class="prog-meta"><span>📹 60 Lectures</span><span>📝 40+ Quizzes</span><span>📅 5 Months</span></div></div>
-      <div class="prog-card"><div class="prog-icon">📋</div><span class="badge badge-navy" style="margin-bottom:.6rem">NTS</span><h3>NTS / GAT Prep</h3><p>Quantitative, verbal, and analytical reasoning for NTS and HEC-GAT examinations.</p><div class="prog-meta"><span>📹 50 Lectures</span><span>📝 40+ Quizzes</span><span>📅 4 Months</span></div></div>
-      <div class="prog-card"><div class="prog-icon">🧬</div><span class="badge badge-blue" style="margin-bottom:.6rem">MDCAT</span><h3>Biology Intensive</h3><p>Deep-dive into MDCAT Biology - the highest-weighted section. Concept + MCQ mastery.</p><div class="prog-meta"><span>📹 40 Lectures</span><span>📝 30+ Quizzes</span><span>📅 3 Months</span></div></div>
-      <div class="prog-card"><div class="prog-icon">⚡</div><span class="badge badge-green" style="margin-bottom:.6rem">ECAT/MDCAT</span><h3>Physics Core</h3><p>Shared Physics prep for both tests - derivations, numericals, MCQs, and shortcuts.</p><div class="prog-meta"><span>📹 35 Lectures</span><span>📝 25+ Quizzes</span><span>📅 3 Months</span></div></div>
+      <div class="prog-card">
+        <span class="badge badge-blue" style="margin-bottom:.6rem">MDCAT</span>
+        <h3>MDCAT Comprehensive</h3>
+        <p>Complete Biology, Chemistry, Physics and English aligned with current PMC and provincial medical syllabi.</p>
+        <div class="prog-meta"><span>120 Lectures</span><span>80+ Quizzes</span><span>10 Months</span></div>
+      </div>
+      <div class="prog-card">
+        <span class="badge badge-green" style="margin-bottom:.6rem">ECAT</span>
+        <h3>ECAT Engineering Core</h3>
+        <p>Mathematics, Physics, Chemistry and English preparation for UET, NUST, GIKI, PIEAS, and FAST admissions.</p>
+        <div class="prog-meta"><span>100 Lectures</span><span>70+ Quizzes</span><span>8 Months</span></div>
+      </div>
+      <div class="prog-card">
+        <span class="badge badge-orange" style="margin-bottom:.6rem">BCAT</span>
+        <h3>BCAT Business Aptitude</h3>
+        <p>Quantitative reasoning, mathematics, analytical ability, and verbal prep for IBA, LUMS, and NUST NBS.</p>
+        <div class="prog-meta"><span>60 Lectures</span><span>40+ Quizzes</span><span>5 Months</span></div>
+      </div>
+      <div class="prog-card">
+        <span class="badge badge-navy" style="margin-bottom:.6rem">NTS</span>
+        <h3>NTS / NAT Preparation</h3>
+        <p>Standardized NAT-I and NAT-II preparation focusing on quantitative, verbal, and analytical sections.</p>
+        <div class="prog-meta"><span>50 Lectures</span><span>40+ Quizzes</span><span>4 Months</span></div>
+      </div>
+      <div class="prog-card">
+        <span class="badge badge-blue" style="margin-bottom:.6rem">MDCAT</span>
+        <h3>Biology Intensive Module</h3>
+        <p>Specialized revision module focusing on medical biology, cell structure, physiology, and past MCQ analysis.</p>
+        <div class="prog-meta"><span>40 Lectures</span><span>30+ Quizzes</span><span>3 Months</span></div>
+      </div>
+      <div class="prog-card">
+        <span class="badge badge-green" style="margin-bottom:.6rem">ECAT/MDCAT</span>
+        <h3>Physics Core Module</h3>
+        <p>Focused physics prep covering derivations, formulas, numerical problem solving, and speed shortcuts.</p>
+        <div class="prog-meta"><span>35 Lectures</span><span>25+ Quizzes</span><span>3 Months</span></div>
+      </div>
     </div>
   </div>
 </section>
@@ -111,16 +178,15 @@
 <section class="pub-section" id="faq" style="background:var(--white)">
   <div class="pub-section-inner">
     <div class="section-head" style="text-align:center">
-      <div class="pub-section-label">FAQ</div>
+      <div class="pub-section-label">Questions &amp; Answers</div>
       <div class="pub-section-title">Frequently Asked Questions</div>
     </div>
     <div class="faq-list">
-      <div class="faq-item"><div class="faq-q">How do I enroll in a batch? <span class="faq-toggle">+</span></div><div class="faq-a">Visit our office or contact us below. You'll be placed in a batch based on your target test and start date, then receive login credentials once your fee is confirmed.</div></div>
-      <div class="faq-item"><div class="faq-q">Can I watch lectures if I miss a class? <span class="faq-toggle">+</span></div><div class="faq-a">Yes - all live classes are recorded and uploaded to your student portal within 24 hours. You'll receive a notification when the recording is available.</div></div>
-      <div class="faq-item"><div class="faq-q">How are assignments submitted? <span class="faq-toggle">+</span></div><div class="faq-a">Directly through the student portal by uploading your file (PDF, image, or Word) inside the relevant topic's Assignment tab. You'll see your submission status and grade once marked.</div></div>
-      <div class="faq-item"><div class="faq-q">Will I be notified about deadlines? <span class="faq-toggle">+</span></div><div class="faq-a">Yes. The portal sends notifications when material is uploaded, when an assignment is due, and escalating warnings if the deadline is approaching and you haven't submitted.</div></div>
-      <div class="faq-item"><div class="faq-q">Can I contact my teacher directly? <span class="faq-toggle">+</span></div><div class="faq-a">Yes - every course page has a "Message Teacher" button that lets you send a message directly to your subject teacher for any academic questions.</div></div>
-      <div class="faq-item"><div class="faq-q">Is online study available? <span class="faq-toggle">+</span></div><div class="faq-a">We offer both physical and online classes. Online students access the same recorded lectures, notes, quizzes, and assignments through the portal.</div></div>
+      <div class="faq-item"><div class="faq-q">How do I register for an academy batch? <span class="faq-toggle">+</span></div><div class="faq-a">Submit an inquiry using the contact form below or visit one of our campus offices. Once fee installment is confirmed, your student portal account credentials will be issued.</div></div>
+      <div class="faq-item"><div class="faq-q">Can I access class recordings if I miss a session? <span class="faq-toggle">+</span></div><div class="faq-a">Yes. Recorded lectures and lecture notes are uploaded to the corresponding topic in your student portal within hours of the class finishing.</div></div>
+      <div class="faq-item"><div class="faq-q">How do students submit homework assignments? <span class="faq-toggle">+</span></div><div class="faq-a">Students upload digital files (PDF, image, Word) inside the relevant course topic. Once graded by the instructor, marks and comments appear directly in your portal.</div></div>
+      <div class="faq-item"><div class="faq-q">How do online classes work? <span class="faq-toggle">+</span></div><div class="faq-a">Scheduled live classes include a secure meeting link accessible through your Schedule and Course pages. Live join links become active around class start times.</div></div>
+      <div class="faq-item"><div class="faq-q">Are fee installment plans available? <span class="faq-toggle">+</span></div><div class="faq-a">Yes. Batch tuition fees can be structured in installments. Installment due dates and payment receipts are tracked in the student portal under Fee Details.</div></div>
     </div>
   </div>
 </section>
@@ -129,51 +195,82 @@
 <section class="pub-section" id="contact">
   <div class="pub-section-inner">
     <div class="section-head">
-      <div class="pub-section-label">Get in Touch</div>
-      <div class="pub-section-title">Contact Mind Route</div>
-      <p class="pub-section-sub">Questions about admissions, fees, or the portal? We reply within 24 hours.</p>
+      <div class="pub-section-label">Contact Us</div>
+      <div class="pub-section-title">Get in Touch with Admissions</div>
+      <p class="pub-section-sub">Have questions regarding batch schedules, enrollment, or entry test criteria? Send us an inquiry below.</p>
     </div>
     <div class="contact-grid">
       <div class="contact-info">
-        <div class="ci-item"><div class="ci-icon">📍</div><div class="ci-text"><h4>Our Offices</h4><p>Karachi: Block 7, Gulshan-e-Iqbal<br>Lahore: Model Town, Main Blvd<br>Islamabad: F-10 Markaz<br>Peshawar: Saddar Road</p></div></div>
-        <div class="ci-item"><div class="ci-icon">📞</div><div class="ci-text"><h4>Phone / WhatsApp</h4><p>0300-1234567 (Karachi)<br>0321-9876543 (Lahore)</p></div></div>
-        <div class="ci-item"><div class="ci-icon">✉️</div><div class="ci-text"><h4>Email</h4><p>admissions@mindroute.pk<br>support@mindroute.pk</p></div></div>
-        <div class="ci-item"><div class="ci-icon">🕐</div><div class="ci-text"><h4>Office Hours</h4><p>Mon – Sat: 9:00 AM – 6:00 PM<br>Sunday: Closed</p></div></div>
+        <div class="ci-item">
+          <div class="ci-text">
+            <h4>Campus Locations</h4>
+            <p>Karachi: Block 7, Gulshan-e-Iqbal<br>Lahore: Model Town, Main Boulevard<br>Islamabad: F-10 Markaz<br>Peshawar: Saddar Road</p>
+          </div>
+        </div>
+        <div class="ci-item">
+          <div class="ci-text">
+            <h4>Telephone &amp; WhatsApp</h4>
+            <p>0300-1234567 (Karachi Campus)<br>0321-9876543 (Lahore Campus)</p>
+          </div>
+        </div>
+        <div class="ci-item">
+          <div class="ci-text">
+            <h4>Direct Email</h4>
+            <p>admissions@mindroute.pk<br>support@mindroute.pk</p>
+          </div>
+        </div>
+        <div class="ci-item">
+          <div class="ci-text">
+            <h4>Office Hours</h4>
+            <p>Monday &ndash; Saturday: 9:00 AM &ndash; 6:00 PM<br>Sunday: Closed</p>
+          </div>
+        </div>
       </div>
       <div class="contact-form-card">
-        <h3>Send a Message</h3>
-        <div class="form-group"><label>Your Name</label><input type="text" class="form-control" placeholder="Ali Hassan"></div>
-        <div class="form-group"><label>Email</label><input type="email" class="form-control" placeholder="ali@example.com"></div>
-        <div class="form-group"><label>Subject</label>
-          <select class="form-control">
-            <option>Admissions Inquiry</option>
-            <option>Fee Information</option>
-            <option>Technical Support (Portal)</option>
-            <option>Other</option>
+        <h3>Send an Admissions Inquiry</h3>
+        <div id="contact-err" style="display:none;padding:0.6rem 0.8rem;background:var(--danger-light);color:var(--danger);border-radius:var(--radius);font-size:0.8rem;margin-bottom:0.75rem"></div>
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" class="form-control" id="contact-name" placeholder="e.g. Ali Hassan" maxlength="80">
+        </div>
+        <div class="form-group">
+          <label>Email Address</label>
+          <input type="email" class="form-control" id="contact-email" placeholder="e.g. ali@example.com" maxlength="120">
+        </div>
+        <div class="form-group">
+          <label>Phone / WhatsApp (Optional)</label>
+          <input type="tel" class="form-control" id="contact-phone" placeholder="e.g. 0300-1234567" maxlength="30">
+        </div>
+        <div class="form-group">
+          <label>Program / Subject of Interest</label>
+          <select class="form-control" id="contact-subject">
+            <option value="MDCAT Admissions Inquiry">MDCAT Admissions Inquiry</option>
+            <option value="ECAT Admissions Inquiry">ECAT Admissions Inquiry</option>
+            <option value="BCAT Admissions Inquiry">BCAT Admissions Inquiry</option>
+            <option value="NTS Preparation Inquiry">NTS / NAT Preparation Inquiry</option>
+            <option value="Fee Structure & Installments">Fee Structure &amp; Installments</option>
+            <option value="General Query">General Query</option>
           </select>
         </div>
-        <div class="form-group"><label>Message</label><textarea class="form-control" placeholder="Write your message here..."></textarea></div>
-        <button class="btn btn-navy btn-full" onclick="handleContact(this)">Send Message →</button>
-        <p id="contact-ok" style="display:none;color:var(--success);text-align:center;margin-top:.75rem;font-weight:600">✅ Message sent! We'll reply within 24 hours.</p>
+        <div class="form-group">
+          <label>Message</label>
+          <textarea class="form-control" id="contact-message" placeholder="Please write your questions or preferred batch start date..." style="min-height:90px"></textarea>
+        </div>
+        <button class="btn btn-navy btn-full" id="contact-submit-btn" onclick="submitInquiry()">Submit Inquiry &rarr;</button>
+        <div id="contact-ok" style="display:none;background:var(--success-light);border:1px solid #bbf7d0;color:var(--success);padding:0.75rem 1rem;border-radius:var(--radius);text-align:center;margin-top:0.85rem;font-size:0.82rem;line-height:1.4">
+          Thank you. Your inquiry has been received by our admissions team. A coordinator will review your request and get in touch.
+        </div>
       </div>
     </div>
   </div>
 </section>
 
 <footer class="pub-footer">
-  <p>© 2024 <strong>Mind Route</strong> Academy. All rights reserved. &nbsp;|&nbsp; <a href="login.html">Student Portal</a> &nbsp;|&nbsp; admissions@mindroute.pk</p>
+  <p>&copy; 2026 <strong>Mind Route Academy</strong>. All rights reserved. &nbsp;|&nbsp; <a href="login.html">Student &amp; Faculty Portal</a> &nbsp;|&nbsp; admissions@mindroute.pk</p>
 </footer>
 
 <script>
-  document.querySelectorAll('.faq-q').forEach(q=>{ q.addEventListener('click',()=>{ const item=q.closest('.faq-item'); const open=item.classList.contains('open'); document.querySelectorAll('.faq-item').forEach(i=>i.classList.remove('open')); if(!open) item.classList.add('open'); }); });
-  document.querySelectorAll('a[href^="#"]').forEach(a=>{ a.addEventListener('click',e=>{ const t=document.querySelector(a.getAttribute('href')); if(t){ e.preventDefault(); t.scrollIntoView({behavior:'smooth'}); } }); });
-  function handleContact(btn){ btn.textContent='Sending...'; btn.disabled=true; setTimeout(()=>{ btn.textContent='Send Message →'; btn.disabled=false; document.getElementById('contact-ok').style.display='block'; },1200); }
-</script>
-<script>
-  // Make body visible immediately - this page doesn't use app.js
-  document.body.style.opacity = '1';
-
-  // existing scripts below...
+  // FAQ toggles
   document.querySelectorAll('.faq-q').forEach(q => {
     q.addEventListener('click', () => {
       const item = q.closest('.faq-item');
@@ -182,20 +279,73 @@
       if (!open) item.classList.add('open');
     });
   });
+
+  // Smooth hash navigation
   document.querySelectorAll('a[href^="#"]').forEach(a => {
     a.addEventListener('click', e => {
-      const t = document.querySelector(a.getAttribute('href'));
-      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth' }); }
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth' });
+      }
     });
   });
-  function handleContact(btn) {
-    btn.textContent = 'Sending...';
+
+  // Real backend submission for inquiries
+  async function submitInquiry() {
+    const errBox = document.getElementById('contact-err');
+    const okBox  = document.getElementById('contact-ok');
+    const btn    = document.getElementById('contact-submit-btn');
+
+    errBox.style.display = 'none';
+    okBox.style.display  = 'none';
+
+    const name    = (document.getElementById('contact-name').value || '').trim();
+    const email   = (document.getElementById('contact-email').value || '').trim();
+    const phone   = (document.getElementById('contact-phone').value || '').trim();
+    const subject = (document.getElementById('contact-subject').value || '').trim();
+    const message = (document.getElementById('contact-message').value || '').trim();
+
+    if (!name) {
+      errBox.textContent = 'Please enter your full name.';
+      errBox.style.display = 'block';
+      return;
+    }
+    if (!email || !email.includes('@')) {
+      errBox.textContent = 'Please enter a valid email address.';
+      errBox.style.display = 'block';
+      return;
+    }
+    if (!message || message.length < 10) {
+      errBox.textContent = 'Please provide a message with at least 10 characters.';
+      errBox.style.display = 'block';
+      return;
+    }
+
     btn.disabled = true;
-    setTimeout(() => {
-      btn.textContent = 'Send Message →';
+    btn.textContent = 'Submitting...';
+
+    try {
+      const res = await fetch('/api/inquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, subject, message }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to submit inquiry.');
+
+      okBox.style.display = 'block';
+      document.getElementById('contact-name').value = '';
+      document.getElementById('contact-email').value = '';
+      document.getElementById('contact-phone').value = '';
+      document.getElementById('contact-message').value = '';
+    } catch (err) {
+      errBox.textContent = err.message || 'An error occurred. Please try again or call our office.';
+      errBox.style.display = 'block';
+    } finally {
       btn.disabled = false;
-      document.getElementById('contact-ok').style.display = 'block';
-    }, 1200);
+      btn.textContent = 'Submit Inquiry \u2192';
+    }
   }
 </script>
 </body>
